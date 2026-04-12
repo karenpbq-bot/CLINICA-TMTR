@@ -1,235 +1,221 @@
 """
-Módulo de Agenda: sistema de citas cruzando disponibilidad confirmada
-de especialistas con pacientes.
+Módulo de Agenda: citas cruzando disponibilidad confirmada de especialistas.
 """
 
 import flet as ft
 from database import (
-    listar_citas,
-    crear_cita,
-    actualizar_cita,
-    cancelar_cita,
-    listar_pacientes,
-    listar_especialistas,
-    listar_disponibilidad,
+    listar_citas, crear_cita, actualizar_cita, cancelar_cita,
+    listar_pacientes, listar_especialistas, listar_disponibilidad,
 )
 
 ESTADOS_CITA = ["pendiente", "confirmada", "realizada", "cancelada"]
-
 ESTADO_COLOR = {
-    "pendiente":   ft.colors.ORANGE_200,
-    "confirmada":  ft.colors.BLUE_200,
-    "realizada":   ft.colors.GREEN_200,
-    "cancelada":   ft.colors.RED_200,
+    "pendiente":  "#FFE0B2",
+    "confirmada": "#BBDEFB",
+    "realizada":  "#C8E6C9",
+    "cancelada":  "#FFCDD2",
 }
+DIAS_CORTOS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 
-class FormularioCita(ft.UserControl):
-    """Formulario para crear o editar una cita."""
-
-    def __init__(self, cita: dict, on_guardar=None):
-        super().__init__()
+class FormularioCita(ft.Column):
+    def __init__(self, cita: dict, on_guardar=None, snack_fn=None):
+        super().__init__(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
         self.cita = cita
         self.on_guardar = on_guardar
-        self.especialista_seleccionado = None
+        self.snack_fn = snack_fn
+        self._construir()
 
-    def build(self):
+    def _construir(self):
         pacientes = listar_pacientes()
         especialistas = listar_especialistas()
 
         self.dd_paciente = ft.Dropdown(
             label="Paciente",
             value=self.cita.get("paciente_id"),
-            options=[
-                ft.dropdown.Option(p["id"], f"{p['apellido']}, {p['nombre']}")
-                for p in pacientes
-            ],
+            options=[ft.dropdown.Option(p["id"], f"{p.get('apellido','')}, {p.get('nombre','')}")
+                     for p in pacientes],
         )
-
         self.dd_especialista = ft.Dropdown(
             label="Especialista",
             value=self.cita.get("especialista_id"),
-            options=[
-                ft.dropdown.Option(e["id"], f"Dr/a. {e['apellido']}, {e['nombre']}")
-                for e in especialistas
-            ],
-            on_change=self.on_especialista_cambio,
+            options=[ft.dropdown.Option(e["id"],
+                     f"Dr/a. {e.get('apellido','')}, {e.get('nombre','')}")
+                     for e in especialistas],
+            on_change=self._on_especialista,
         )
-
-        self.disponibilidad_info = ft.Text(
-            "Selecciona un especialista para ver su disponibilidad confirmada.",
-            color=ft.colors.GREY_600,
-            size=12,
+        self.info_disp = ft.Text(
+            "Seleccioná un especialista para ver su disponibilidad confirmada.",
+            color="#757575", size=12,
         )
-
-        self.tf_fecha = ft.TextField(
-            label="Fecha y Hora (YYYY-MM-DD HH:MM)",
-            value=self.cita.get("fecha_hora", ""),
-        )
-
+        self.tf_fecha    = ft.TextField(label="Fecha y Hora (YYYY-MM-DD HH:MM)",
+                                        value=self.cita.get("fecha_hora", ""), expand=True)
         self.dd_duracion = ft.Dropdown(
-            label="Duración",
-            value=str(self.cita.get("duracion_min", 30)),
-            options=[
-                ft.dropdown.Option("15", "15 min"),
-                ft.dropdown.Option("30", "30 min"),
-                ft.dropdown.Option("45", "45 min"),
-                ft.dropdown.Option("60", "60 min"),
-                ft.dropdown.Option("90", "90 min"),
-            ],
+            label="Duración", value=str(self.cita.get("duracion_min", 30)),
+            options=[ft.dropdown.Option(str(m), f"{m} min")
+                     for m in [15, 30, 45, 60, 90]],
+            width=160,
         )
-
         self.dd_estado = ft.Dropdown(
-            label="Estado",
-            value=self.cita.get("estado", "pendiente"),
+            label="Estado", value=self.cita.get("estado", "pendiente"),
             options=[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
         )
+        self.tf_motivo = ft.TextField(label="Motivo", value=self.cita.get("motivo", ""),
+                                      multiline=True, min_lines=2)
+        self.tf_notas  = ft.TextField(label="Notas adicionales",
+                                      value=self.cita.get("notas", ""),
+                                      multiline=True, min_lines=2)
 
-        self.tf_motivo = ft.TextField(
-            label="Motivo de la consulta",
-            value=self.cita.get("motivo", ""),
-            multiline=True,
-            min_lines=2,
-        )
-
-        self.tf_notas = ft.TextField(
-            label="Notas adicionales",
-            value=self.cita.get("notas", ""),
-            multiline=True,
-            min_lines=2,
-        )
-
-        return ft.Column(
-            controls=[
-                ft.Text("Nueva Cita" if not self.cita.get("id") else "Editar Cita",
-                        size=16, weight=ft.FontWeight.BOLD),
-                self.dd_paciente,
-                self.dd_especialista,
-                self.disponibilidad_info,
-                ft.Row(controls=[self.tf_fecha, self.dd_duracion], spacing=8),
-                self.dd_estado,
-                self.tf_motivo,
-                self.tf_notas,
-                ft.Row(
-                    controls=[
-                        ft.ElevatedButton("Guardar", icon=ft.icons.SAVE, on_click=self.guardar),
-                        ft.OutlinedButton("Cancelar cita",
-                                         icon=ft.icons.CANCEL,
-                                         on_click=self.cancelar_cita,
-                                         visible=bool(self.cita.get("id"))),
-                    ],
-                    spacing=8,
-                ),
-            ],
-            spacing=12,
-            scroll=ft.ScrollMode.AUTO,
-        )
-
-    def on_especialista_cambio(self, e):
-        esp_id = self.dd_especialista.value
-        if not esp_id:
-            return
-        bloques_confirmados = [
-            b for b in listar_disponibilidad(esp_id) if b.get("certeza") == "confirmado"
+        self.controls = [
+            ft.Text("Nueva Cita" if not self.cita.get("id") else "Editar Cita",
+                    size=16, weight=ft.FontWeight.BOLD),
+            self.dd_paciente,
+            self.dd_especialista,
+            self.info_disp,
+            ft.Row(controls=[self.tf_fecha, self.dd_duracion], spacing=8),
+            self.dd_estado,
+            self.tf_motivo,
+            self.tf_notas,
+            ft.Row(controls=[
+                ft.ElevatedButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
+                ft.OutlinedButton("Cancelar cita", icon=ft.Icons.CANCEL,
+                                  on_click=self._cancelar,
+                                  visible=bool(self.cita.get("id"))),
+            ], spacing=8),
         ]
-        if bloques_confirmados:
-            dias_str = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-            resumen = "  |  ".join(
-                f"{dias_str[b['dia_semana']]} {b['hora_inicio']}–{b['hora_fin']}"
-                for b in bloques_confirmados
-            )
-            self.disponibilidad_info.value = f"🟢 Disponibilidad confirmada: {resumen}"
-            self.disponibilidad_info.color = ft.colors.GREEN_700
-        else:
-            self.disponibilidad_info.value = "⚠️ Este especialista no tiene bloques confirmados."
-            self.disponibilidad_info.color = ft.colors.ORANGE_700
-        self.update()
 
-    def guardar(self, e):
+    def _on_especialista(self, e):
+        eid = self.dd_especialista.value
+        if not eid:
+            return
+        try:
+            bloques = [b for b in listar_disponibilidad(eid)
+                       if b.get("certeza") == "confirmado"]
+            if bloques:
+                resumen = "  |  ".join(
+                    f"{DIAS_CORTOS[b['dia_semana']]} {b['hora_inicio']}–{b['hora_fin']}"
+                    for b in bloques
+                )
+                self.info_disp.value = f"🟢 Disponibilidad confirmada: {resumen}"
+                self.info_disp.color = "#2E7D32"
+            else:
+                self.info_disp.value = "⚠️ Sin bloques confirmados para este especialista."
+                self.info_disp.color = "#E65100"
+            self.info_disp.update()
+        except Exception as ex:
+            if self.snack_fn:
+                self.snack_fn(f"Error: {ex}", error=True)
+
+    def _guardar(self, e):
         datos = {
-            "paciente_id": self.dd_paciente.value,
+            "paciente_id":     self.dd_paciente.value,
             "especialista_id": self.dd_especialista.value,
-            "fecha_hora": self.tf_fecha.value,
-            "duracion_min": int(self.dd_duracion.value),
-            "estado": self.dd_estado.value,
-            "motivo": self.tf_motivo.value,
-            "notas": self.tf_notas.value,
+            "fecha_hora":      self.tf_fecha.value,
+            "duracion_min":    int(self.dd_duracion.value or 30),
+            "estado":          self.dd_estado.value,
+            "motivo":          self.tf_motivo.value,
+            "notas":           self.tf_notas.value,
         }
-        if self.cita.get("id"):
-            actualizar_cita(self.cita["id"], datos)
-        else:
-            crear_cita(datos)
-        if self.on_guardar:
-            self.on_guardar()
-
-    def cancelar_cita(self, e):
-        if self.cita.get("id"):
-            cancelar_cita(self.cita["id"])
+        try:
+            if self.cita.get("id"):
+                actualizar_cita(self.cita["id"], datos)
+            else:
+                crear_cita(datos)
+            if self.snack_fn:
+                self.snack_fn("Cita guardada correctamente.")
             if self.on_guardar:
                 self.on_guardar()
+        except Exception as ex:
+            if self.snack_fn:
+                self.snack_fn(f"Error: {ex}", error=True)
+
+    def _cancelar(self, e):
+        try:
+            cancelar_cita(self.cita["id"])
+            if self.snack_fn:
+                self.snack_fn("Cita cancelada.")
+            if self.on_guardar:
+                self.on_guardar()
+        except Exception as ex:
+            if self.snack_fn:
+                self.snack_fn(f"Error: {ex}", error=True)
 
 
-class AgendaView(ft.UserControl):
-    """Vista principal de la agenda de citas."""
+class AgendaView(ft.Row):
+    def __init__(self):
+        super().__init__(expand=True, spacing=0)
+        self._lista_col   = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
+        self._detalle_col = ft.Column(expand=True, visible=False, spacing=8)
 
-    def build(self):
-        self.lista_column = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
-        self.detalle = ft.Column(expand=True, visible=False)
-        self.cargar_lista()
-
-        return ft.Row(
-            controls=[
-                ft.Container(
-                    content=ft.Column(controls=[
-                        ft.Text("Agenda", size=18, weight=ft.FontWeight.BOLD),
-                        ft.ElevatedButton("+ Nueva Cita", on_click=self.nueva_cita),
-                        self.lista_column,
-                    ], spacing=8, expand=True),
-                    width=320,
-                    padding=8,
-                ),
-                ft.VerticalDivider(width=1),
-                ft.Container(content=self.detalle, expand=True, padding=8),
-            ],
-            expand=True,
+        panel_izq = ft.Container(
+            content=ft.Column(controls=[
+                ft.Text("Agenda de Citas", size=16, weight=ft.FontWeight.BOLD),
+                ft.ElevatedButton("+ Nueva Cita", icon=ft.Icons.ADD,
+                                  on_click=lambda e: self._seleccionar({})),
+                ft.Divider(height=4),
+                self._lista_col,
+            ], spacing=8, expand=True),
+            width=320, padding=12,
+            border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
         )
+        panel_der = ft.Container(content=self._detalle_col, expand=True, padding=12)
+        self.controls = [panel_izq, panel_der]
 
-    def cargar_lista(self):
-        self.lista_column.controls.clear()
-        citas = listar_citas()
+    def did_mount(self):
+        self._cargar()
+
+    def _snack(self, msg, error=False):
+        if self.page:
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text(msg),
+                bgcolor=ft.Colors.RED_700 if error else ft.Colors.GREEN_700,
+                open=True,
+            )
+            self.page.update()
+
+    def _cargar(self):
+        try:
+            citas = listar_citas()
+        except Exception as ex:
+            self._snack(f"Error: {ex}", error=True)
+            citas = []
+        self._lista_col.controls.clear()
         for c in citas:
-            paciente = c.get("pacientes") or {}
-            especialista = c.get("especialistas") or {}
+            pac = c.get("pacientes") or {}
+            esp = c.get("especialistas") or {}
             estado = c.get("estado", "pendiente")
-            self.lista_column.controls.append(
+            self._lista_col.controls.append(
                 ft.Container(
                     content=ft.ListTile(
                         title=ft.Text(
-                            f"{paciente.get('apellido', '')}, {paciente.get('nombre', '')}"
+                            f"{pac.get('apellido','')}, {pac.get('nombre','')}",
+                            size=13,
                         ),
                         subtitle=ft.Text(
-                            f"{c.get('fecha_hora', '')} · Dr/a. {especialista.get('apellido', '')}"
+                            f"{str(c.get('fecha_hora',''))[:16]} · Dr/a. {esp.get('apellido','')}",
+                            size=11,
                         ),
-                        trailing=ft.Text(estado.capitalize(),
-                                         color=ft.colors.BLACK87, size=11),
-                        on_click=lambda e, cita=c: self.seleccionar_cita(cita),
+                        trailing=ft.Text(estado.capitalize(), size=11),
+                        on_click=lambda e, cita=c: self._seleccionar(cita),
+                        content_padding=ft.padding.symmetric(horizontal=8),
                     ),
-                    bgcolor=ESTADO_COLOR.get(estado, ft.colors.GREY_100),
+                    bgcolor=ESTADO_COLOR.get(estado, "#F5F5F5"),
                     border_radius=6,
                 )
             )
+        if self._lista_col.page:
+            self._lista_col.update()
 
-    def seleccionar_cita(self, cita: dict):
-        self.detalle.visible = True
-        self.detalle.controls = [
-            FormularioCita(cita, on_guardar=self.refrescar)
+    def _seleccionar(self, cita: dict):
+        self._detalle_col.visible = True
+        self._detalle_col.controls = [
+            FormularioCita(cita, on_guardar=self._refrescar, snack_fn=self._snack)
         ]
-        self.update()
+        if self._detalle_col.page:
+            self._detalle_col.update()
 
-    def nueva_cita(self, e):
-        self.seleccionar_cita({})
-
-    def refrescar(self):
-        self.cargar_lista()
-        self.detalle.visible = False
-        self.update()
+    def _refrescar(self):
+        self._cargar()
+        self._detalle_col.visible = False
+        if self._detalle_col.page:
+            self._detalle_col.update()

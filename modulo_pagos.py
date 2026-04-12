@@ -4,76 +4,35 @@ Módulo de Pagos: control de abonos y saldos pendientes.
 
 import flet as ft
 from database import (
-    listar_pagos,
-    registrar_pago,
-    saldo_pendiente,
-    listar_pacientes,
+    listar_pagos, registrar_pago, listar_pacientes,
     listar_tratamientos,
 )
 
 METODOS_PAGO = [
-    "Efectivo",
-    "Tarjeta de Débito",
-    "Tarjeta de Crédito",
-    "Transferencia Bancaria",
-    "Obra Social",
-    "Cheque",
-    "Otro",
+    "Efectivo", "Tarjeta de Débito", "Tarjeta de Crédito",
+    "Transferencia Bancaria", "Obra Social", "Cheque", "Otro",
 ]
 
 
-class ResumenFinanciero(ft.UserControl):
-    """Tarjetas de resumen: total presupuestado, pagado y saldo."""
-
-    def __init__(self, paciente_id: str):
-        super().__init__()
-        self.paciente_id = paciente_id
-
-    def build(self):
-        tratamientos = listar_tratamientos(self.paciente_id)
-        pagos = listar_pagos(self.paciente_id)
-
-        total = sum(float(t.get("costo", 0)) for t in tratamientos)
-        pagado = sum(float(p.get("monto", 0)) for p in pagos)
-        saldo = total - pagado
-
-        def tarjeta(titulo, monto, color):
-            return ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text(titulo, size=12, color=ft.colors.WHITE70),
-                        ft.Text(f"$ {monto:.2f}", size=20,
-                                weight=ft.FontWeight.BOLD, color=ft.colors.WHITE),
-                    ],
-                    spacing=4,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-                bgcolor=color,
-                border_radius=10,
-                padding=16,
-                expand=True,
-            )
-
-        return ft.Row(
-            controls=[
-                tarjeta("Total Presupuestado", total, ft.colors.BLUE_700),
-                tarjeta("Total Pagado", pagado, ft.colors.GREEN_700),
-                tarjeta("Saldo Pendiente", saldo,
-                        ft.colors.RED_700 if saldo > 0 else ft.colors.GREY_600),
-            ],
-            spacing=12,
-        )
+def _tarjeta_resumen(titulo: str, monto: float, color: str) -> ft.Container:
+    return ft.Container(
+        content=ft.Column(controls=[
+            ft.Text(titulo, size=12, color="#FAFAFA"),
+            ft.Text(f"$ {monto:.2f}", size=20, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+        ], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        bgcolor=color, border_radius=10, padding=16, expand=True,
+    )
 
 
-class FormularioPago(ft.UserControl):
-    """Formulario para registrar un nuevo abono."""
-
-    def __init__(self, paciente_id: str, on_guardar=None):
-        super().__init__()
+class FormularioPago(ft.Column):
+    def __init__(self, paciente_id: str, on_guardar=None, snack_fn=None):
+        super().__init__(spacing=10)
         self.paciente_id = paciente_id
         self.on_guardar = on_guardar
+        self.snack_fn = snack_fn
+        self._construir()
 
-    def build(self):
+    def _construir(self):
         tratamientos = listar_tratamientos(self.paciente_id)
 
         self.dd_tratamiento = ft.Dropdown(
@@ -81,171 +40,167 @@ class FormularioPago(ft.UserControl):
             options=[
                 ft.dropdown.Option(
                     t["id"],
-                    f"Diente {t.get('diente', '–')} · {t.get('descripcion', '')} · $ {float(t.get('costo', 0)):.2f}",
+                    f"D{t.get('diente','–')} {t.get('cara','')} · "
+                    f"{t.get('descripcion','')} · $ {float(t.get('costo',0)):.2f}",
                 )
                 for t in tratamientos
             ],
         )
-
-        self.tf_monto = ft.TextField(
-            label="Monto ($)",
-            keyboard_type=ft.KeyboardType.NUMBER,
-            autofocus=True,
-        )
-
-        self.dd_metodo = ft.Dropdown(
-            label="Método de pago",
-            value="Efectivo",
+        self.tf_monto     = ft.TextField(label="Monto ($)", autofocus=True,
+                                          keyboard_type=ft.KeyboardType.NUMBER, expand=True)
+        self.dd_metodo    = ft.Dropdown(
+            label="Método de pago", value="Efectivo",
             options=[ft.dropdown.Option(m) for m in METODOS_PAGO],
+            expand=True,
         )
+        self.tf_comprob   = ft.TextField(label="Nº Comprobante / Recibo", expand=True)
+        self.tf_notas     = ft.TextField(label="Notas", multiline=True, min_lines=2)
 
-        self.tf_comprobante = ft.TextField(label="Nº Comprobante / Recibo")
-
-        self.tf_notas = ft.TextField(
-            label="Notas",
-            multiline=True,
-            min_lines=2,
-        )
-
-        return ft.Column(
-            controls=[
-                ft.Text("Registrar Pago", size=14, weight=ft.FontWeight.BOLD),
-                self.dd_tratamiento,
-                ft.Row(controls=[self.tf_monto, self.dd_metodo], spacing=8),
-                self.tf_comprobante,
-                self.tf_notas,
-                ft.ElevatedButton("Confirmar Pago", icon=ft.icons.PAYMENT, on_click=self.guardar),
-            ],
-            spacing=10,
-        )
-
-    def guardar(self, e):
-        monto_str = self.tf_monto.value.strip().replace(",", ".")
-        if not monto_str:
-            return
-
-        datos = {
-            "paciente_id": self.paciente_id,
-            "tratamiento_id": self.dd_tratamiento.value,
-            "monto": float(monto_str),
-            "metodo": self.dd_metodo.value,
-            "comprobante": self.tf_comprobante.value,
-            "notas": self.tf_notas.value,
-        }
-        registrar_pago(datos)
-        if self.on_guardar:
-            self.on_guardar()
-
-
-class HistorialPagos(ft.UserControl):
-    """Tabla de pagos realizados por el paciente."""
-
-    def __init__(self, paciente_id: str):
-        super().__init__()
-        self.paciente_id = paciente_id
-
-    def build(self):
-        pagos = listar_pagos(self.paciente_id)
-
-        if not pagos:
-            return ft.Text("Sin pagos registrados.", color=ft.colors.GREY_500)
-
-        filas = [
-            ft.DataRow(cells=[
-                ft.DataCell(ft.Text(str(p.get("fecha", ""))[:10])),
-                ft.DataCell(ft.Text(p.get("metodo", ""))),
-                ft.DataCell(ft.Text(f"$ {float(p.get('monto', 0)):.2f}",
-                                    weight=ft.FontWeight.W_600)),
-                ft.DataCell(ft.Text(p.get("comprobante", ""))),
-                ft.DataCell(ft.Text(p.get("notas", ""), size=11)),
-            ])
-            for p in pagos
+        self.controls = [
+            ft.Text("Registrar Pago", size=14, weight=ft.FontWeight.BOLD),
+            self.dd_tratamiento,
+            ft.Row(controls=[self.tf_monto, self.dd_metodo], spacing=8),
+            self.tf_comprob,
+            self.tf_notas,
+            ft.ElevatedButton("Confirmar Pago", icon=ft.Icons.PAYMENT,
+                              on_click=self._guardar),
         ]
 
-        return ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Fecha")),
-                ft.DataColumn(ft.Text("Método")),
-                ft.DataColumn(ft.Text("Monto"), numeric=True),
-                ft.DataColumn(ft.Text("Comprobante")),
-                ft.DataColumn(ft.Text("Notas")),
-            ],
-            rows=filas,
-        )
+    def _guardar(self, e):
+        monto_str = (self.tf_monto.value or "").strip().replace(",", ".")
+        if not monto_str:
+            if self.snack_fn:
+                self.snack_fn("Ingresá el monto.", error=True)
+            return
+        try:
+            datos = {
+                "paciente_id":    self.paciente_id,
+                "tratamiento_id": self.dd_tratamiento.value,
+                "monto":          float(monto_str),
+                "metodo":         self.dd_metodo.value,
+                "comprobante":    self.tf_comprob.value,
+                "notas":          self.tf_notas.value,
+            }
+            registrar_pago(datos)
+            if self.snack_fn:
+                self.snack_fn("Pago registrado correctamente.")
+            if self.on_guardar:
+                self.on_guardar()
+        except Exception as ex:
+            if self.snack_fn:
+                self.snack_fn(f"Error: {ex}", error=True)
 
 
-class PagosView(ft.UserControl):
-    """Vista principal del módulo de pagos."""
+class PagosView(ft.Column):
+    def __init__(self):
+        super().__init__(spacing=16, expand=True)
+        self.paciente_id: str | None = None
+        self._mostrar_form = False
+        self._resumen_row  = ft.Row(spacing=12)
+        self._form_area    = ft.Column(spacing=0)
+        self._historial    = ft.Column(spacing=6)
+        self._construir_base()
 
-    def __init__(self, paciente_id: str = None):
-        super().__init__()
-        self.paciente_id = paciente_id
-        self.mostrar_formulario = False
+    def _snack(self, msg, error=False):
+        if self.page:
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text(msg),
+                bgcolor=ft.Colors.RED_700 if error else ft.Colors.GREEN_700,
+                open=True,
+            )
+            self.page.update()
 
-    def build(self):
-        return ft.Column(
-            controls=[
-                ft.Text("Control de Pagos", size=18, weight=ft.FontWeight.BOLD),
-                self._selector_paciente(),
-            ],
-            spacing=16,
-            padding=8,
-            expand=True,
-        )
-
-    def _selector_paciente(self):
+    def _construir_base(self):
         pacientes = listar_pacientes()
-        return ft.Column(
-            controls=[
-                ft.Dropdown(
-                    label="Seleccionar paciente",
-                    options=[
-                        ft.dropdown.Option(p["id"], f"{p['apellido']}, {p['nombre']}")
-                        for p in pacientes
-                    ],
-                    on_change=lambda e: self._cargar_paciente(e.control.value),
-                    width=360,
-                ),
-                ft.Container(key="contenido_pagos"),
-            ],
-            spacing=12,
+        self.dd_selector = ft.Dropdown(
+            label="Seleccionar paciente",
+            options=[ft.dropdown.Option(p["id"],
+                     f"{p.get('apellido','')}, {p.get('nombre','')}") for p in pacientes],
+            on_change=lambda e: self._cargar_paciente(e.control.value),
+            width=360,
         )
+        self.controls = [
+            ft.Text("Control de Pagos", size=18, weight=ft.FontWeight.BOLD),
+            self.dd_selector,
+            self._resumen_row,
+            self._form_area,
+            self._historial,
+        ]
 
-    def _cargar_paciente(self, paciente_id: str):
-        self.paciente_id = paciente_id
-        self.mostrar_formulario = False
+    def _cargar_paciente(self, pid: str):
+        self.paciente_id = pid
+        self._mostrar_form = False
+        self._actualizar()
 
-        contenido = ft.Column(
-            controls=[
-                ResumenFinanciero(paciente_id),
-                ft.Divider(),
+    def _actualizar(self):
+        if not self.paciente_id:
+            return
+
+        tratamientos = listar_tratamientos(self.paciente_id)
+        pagos        = listar_pagos(self.paciente_id)
+        total    = sum(float(t.get("costo", 0)) for t in tratamientos)
+        pagado   = sum(float(p.get("monto", 0)) for p in pagos)
+        saldo    = total - pagado
+
+        # Tarjetas de resumen
+        self._resumen_row.controls = [
+            _tarjeta_resumen("Total Presupuestado", total, "#1565C0"),
+            _tarjeta_resumen("Total Pagado", pagado, "#2E7D32"),
+            _tarjeta_resumen("Saldo Pendiente", saldo,
+                             "#C62828" if saldo > 0 else "#616161"),
+        ]
+
+        # Formulario de pago
+        self._form_area.controls = [
+            ft.Row(controls=[
                 ft.ElevatedButton(
-                    "+ Registrar Pago",
-                    icon=ft.icons.ADD,
-                    on_click=lambda e: self._toggle_formulario(paciente_id),
+                    "- Cerrar" if self._mostrar_form else "+ Registrar Pago",
+                    icon=ft.Icons.REMOVE if self._mostrar_form else ft.Icons.ADD,
+                    on_click=lambda e: self._toggle_form(),
                 ),
-                FormularioPago(paciente_id, on_guardar=lambda: self._cargar_paciente(paciente_id))
-                if self.mostrar_formulario else ft.Container(),
-                ft.Divider(),
-                ft.Text("Historial de Pagos", size=14, weight=ft.FontWeight.BOLD),
-                HistorialPagos(paciente_id),
-            ],
-            spacing=12,
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-        )
+            ]),
+            FormularioPago(self.paciente_id,
+                           on_guardar=self._refrescar,
+                           snack_fn=self._snack)
+            if self._mostrar_form else ft.Container(),
+        ]
 
-        # Reemplazar el contenedor de contenido
-        col = self.controls[0] if self.controls else None
-        if col and isinstance(col, ft.Column):
-            # Encontrar el container de contenido y actualizarlo
-            for ctrl in col.controls:
-                if isinstance(ctrl, ft.Column):
-                    if len(ctrl.controls) > 1:
-                        ctrl.controls[1] = contenido
-                        break
-        self.update()
+        # Historial
+        filas = []
+        for p in pagos:
+            filas.append(ft.DataRow(cells=[
+                ft.DataCell(ft.Text(str(p.get("fecha",""))[:10], size=11)),
+                ft.DataCell(ft.Text(p.get("metodo",""), size=11)),
+                ft.DataCell(ft.Text(f"$ {float(p.get('monto',0)):.2f}",
+                                    size=11, weight=ft.FontWeight.W_600)),
+                ft.DataCell(ft.Text(p.get("comprobante",""), size=11)),
+                ft.DataCell(ft.Text(p.get("notas",""), size=11)),
+            ]))
 
-    def _toggle_formulario(self, paciente_id: str):
-        self.mostrar_formulario = not self.mostrar_formulario
-        self._cargar_paciente(paciente_id)
+        self._historial.controls = [
+            ft.Divider(),
+            ft.Text("Historial de Pagos", size=14, weight=ft.FontWeight.W_500),
+            ft.DataTable(
+                columns=[
+                    ft.DataColumn(ft.Text("Fecha", size=11)),
+                    ft.DataColumn(ft.Text("Método", size=11)),
+                    ft.DataColumn(ft.Text("Monto", size=11), numeric=True),
+                    ft.DataColumn(ft.Text("Comprobante", size=11)),
+                    ft.DataColumn(ft.Text("Notas", size=11)),
+                ],
+                rows=filas,
+                column_spacing=16,
+            ) if filas else ft.Text("Sin pagos registrados.", color="#9E9E9E"),
+        ]
+
+        for widget in [self._resumen_row, self._form_area, self._historial]:
+            if widget.page:
+                widget.update()
+
+    def _toggle_form(self):
+        self._mostrar_form = not self._mostrar_form
+        self._actualizar()
+
+    def _refrescar(self):
+        self._mostrar_form = False
+        self._actualizar()

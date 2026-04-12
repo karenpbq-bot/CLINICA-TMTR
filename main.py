@@ -1,5 +1,6 @@
-import flet as ft
+import os
 import threading
+import flet as ft
 from modulo_pacientes import PacientesView
 from especialistas import EspecialistasView
 from modulo_agenda import AgendaView
@@ -7,6 +8,7 @@ from modulo_tratamientos import TratamientosView
 from modulo_pagos import PagosView
 
 INACTIVIDAD_SEGUNDOS = 300  # 5 minutos
+PORT = int(os.environ.get("PORT", 8000))
 
 
 def main(page: ft.Page):
@@ -26,17 +28,17 @@ def main(page: ft.Page):
 
     def cerrar_sesion():
         page.session.clear()
-        page.go("/login")
+        page.push_route("/login")
         page.update()
 
     def on_route_change(e: ft.RouteChangeEvent):
         reiniciar_timer()
         page.views.clear()
 
-        if page.route == "/login" or page.route == "/":
-            page.views.append(login_view())
+        if page.route in ("/login", "/"):
+            page.views.append(login_view(page))
         else:
-            page.views.append(app_shell(page.route))
+            page.views.append(app_shell(page.route, page))
 
         page.update()
 
@@ -49,51 +51,106 @@ def main(page: ft.Page):
     page.on_view_pop = on_view_pop
     page.on_keyboard_event = lambda _: reiniciar_timer()
 
-    page.go("/login")
+    page.push_route("/login")
 
 
-def login_view():
+def login_view(page: ft.Page):
+    def ingresar(e):
+        # TODO: validar credenciales contra Supabase
+        page.push_route("/pacientes")
+
     return ft.View(
         "/login",
         controls=[
             ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.icons.LOCAL_HOSPITAL, size=64, color=ft.colors.BLUE_700),
-                        ft.Text("Consultorio Odontológico", size=24, weight=ft.FontWeight.BOLD),
-                        ft.TextField(label="Usuario", autofocus=True),
-                        ft.TextField(label="Contraseña", password=True, can_reveal_password=True),
-                        ft.ElevatedButton("Ingresar", width=200),
+                        ft.Icon(ft.Icons.LOCAL_HOSPITAL, size=72, color=ft.Colors.BLUE_700),
+                        ft.Text(
+                            "Consultorio Odontológico",
+                            size=26,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.BLUE_900,
+                        ),
+                        ft.Text(
+                            "Sistema de Gestión",
+                            size=14,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                        ft.TextField(
+                            label="Usuario",
+                            autofocus=True,
+                            prefix_icon=ft.Icons.PERSON,
+                            width=320,
+                        ),
+                        ft.TextField(
+                            label="Contraseña",
+                            password=True,
+                            can_reveal_password=True,
+                            prefix_icon=ft.Icons.LOCK,
+                            width=320,
+                            on_submit=ingresar,
+                        ),
+                        ft.ElevatedButton(
+                            "Ingresar",
+                            width=320,
+                            height=44,
+                            icon=ft.Icons.LOGIN,
+                            on_click=ingresar,
+                        ),
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=16,
+                    spacing=14,
                 ),
                 alignment=ft.alignment.center,
                 expand=True,
+                bgcolor=ft.Colors.WHITE,
             )
         ],
+        bgcolor=ft.Colors.BLUE_GREY_50,
     )
 
 
-def app_shell(route: str):
-    modulos = {
-        "/pacientes": ("Pacientes", ft.icons.PEOPLE, PacientesView()),
-        "/especialistas": ("Especialistas", ft.icons.MEDICAL_SERVICES, EspecialistasView()),
-        "/agenda": ("Agenda", ft.icons.CALENDAR_TODAY, AgendaView()),
-        "/tratamientos": ("Tratamientos", ft.icons.MEDICAL_INFORMATION, TratamientosView()),
-        "/pagos": ("Pagos", ft.icons.PAYMENT, PagosView()),
-    }
+MODULOS = [
+    ("/pacientes",     "Pacientes",     ft.Icons.PEOPLE),
+    ("/especialistas", "Especialistas", ft.Icons.MEDICAL_SERVICES),
+    ("/agenda",        "Agenda",        ft.Icons.CALENDAR_TODAY),
+    ("/tratamientos",  "Tratamientos",  ft.Icons.MEDICAL_INFORMATION),
+    ("/pagos",         "Pagos",         ft.Icons.PAYMENT),
+]
+
+VISTAS = {
+    "/pacientes":     lambda: PacientesView(),
+    "/especialistas": lambda: EspecialistasView(),
+    "/agenda":        lambda: AgendaView(),
+    "/tratamientos":  lambda: TratamientosView(),
+    "/pagos":         lambda: PagosView(),
+}
+
+
+def app_shell(route: str, page: ft.Page):
+    rutas = [r for r, _, _ in MODULOS]
+    idx = rutas.index(route) if route in rutas else 0
+
+    def navegar(e):
+        ruta_destino = rutas[e.control.selected_index]
+        page.go(ruta_destino)
 
     rail = ft.NavigationRail(
-        selected_index=list(modulos.keys()).index(route) if route in modulos else 0,
+        selected_index=idx,
         label_type=ft.NavigationRailLabelType.ALL,
+        min_width=80,
         destinations=[
             ft.NavigationRailDestination(icon=icon, label=nombre)
-            for _, (nombre, icon, _) in modulos.items()
+            for _, nombre, icon in MODULOS
         ],
+        on_change=navegar,
+        bgcolor=ft.Colors.BLUE_GREY_50,
     )
 
-    contenido = modulos.get(route, list(modulos.values())[0])[2]
+    vista_fn = VISTAS.get(route, VISTAS["/pacientes"])
+    contenido = vista_fn()
 
     return ft.View(
         route,
@@ -102,13 +159,14 @@ def app_shell(route: str):
                 controls=[
                     rail,
                     ft.VerticalDivider(width=1),
-                    ft.Container(content=contenido, expand=True, padding=16),
+                    ft.Container(content=contenido, expand=True),
                 ],
                 expand=True,
             )
         ],
         padding=0,
+        bgcolor=ft.Colors.WHITE,
     )
 
 
-ft.app(target=main)
+ft.run(main, view=ft.AppView.WEB_BROWSER, port=PORT, host="0.0.0.0")
