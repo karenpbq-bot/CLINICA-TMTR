@@ -982,7 +982,7 @@ OdontogramaDiagnosticoView = OdontogramaView
 #  VISTA PRINCIPAL — PacientesView
 # ═══════════════════════════════════════════════════════════════════════════
 
-_TABS = [
+_TABS_HISTORIA = [
     ("Ficha",        ft.Icons.PERSON),
     ("Anamnesis",    ft.Icons.HEALTH_AND_SAFETY),
     ("Exploración",  ft.Icons.NOTES),
@@ -990,38 +990,53 @@ _TABS = [
 ]
 
 
+def _tab_btn(lbl, icono, activa: bool, on_click):
+    return ft.ElevatedButton(
+        lbl, icon=icono,
+        on_click=on_click,
+        style=ft.ButtonStyle(
+            bgcolor=ft.Colors.BLUE_700 if activa else ft.Colors.GREY_200,
+            color=ft.Colors.WHITE if activa else ft.Colors.GREY_800,
+        ),
+    )
+
+
 class PacientesView(ft.Column):
     """
-    Vista principal del módulo Pacientes.
-    Selector de paciente → 4 pestañas: Ficha | Anamnesis | Exploración | Odontograma.
-    Guarda paciente_id en page.session para otros módulos.
+    Vista principal del módulo Pacientes con dos pestañas:
+      0 = Nuevo Paciente  (formulario de alta)
+      1 = Historia Clínica (selector + 4 sub-pestañas)
     """
 
     def __init__(self):
         super().__init__(spacing=0, expand=True)
         self.paciente_id: str | None = None
-        self._tab_activo = 0
-        self._tab_btns: list[ft.ElevatedButton] = []
-        self._area = ft.Container(
-            expand=True, padding=ft.Padding.all(16),
-            content=ft.Column(controls=[
-                ft.Icon(ft.Icons.PERSON_SEARCH, size=48, color="#BDBDBD"),
-                ft.Text("Seleccioná un paciente para ver su historia clínica",
-                        color="#9E9E9E", size=14, italic=True),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-               alignment=ft.MainAxisAlignment.CENTER,
-               expand=True),
-        )
-        self._barra_tabs = ft.Container(
+        self._tab_main   = 0   # 0=Nuevo Paciente  1=Historia Clínica
+        self._tab_hist   = 0   # 0=Ficha 1=Anamnesis 2=Exploración 3=Odontograma
+
+        # ── barras de pestañas (se reconstruyen en _construir) ──────────
+        self._btn_nuevo    = None
+        self._btn_historia = None
+        self._tab_hist_btns: list[ft.ElevatedButton] = []
+
+        # ── barra de sub-pestañas historia (oculta hasta elegir paciente) ─
+        self._barra_hist = ft.Container(
             visible=False,
             content=ft.Row(spacing=6),
             padding=ft.padding.symmetric(horizontal=16, vertical=8),
             bgcolor="#F5F5F5",
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
+
+        # ── área de contenido principal ─────────────────────────────────
+        self._area = ft.Container(expand=True, padding=ft.Padding.all(16))
+
         self._construir()
 
+    # ── construcción inicial ──────────────────────────────────────────────
+
     def _construir(self):
+        # Dropdown de pacientes (para tab Historia Clínica)
         try:
             pacientes = listar_pacientes()
         except Exception:
@@ -1036,50 +1051,131 @@ class PacientesView(ft.Column):
                     f"{p.get('apellido','–')}, {p.get('nombre','')}  "
                     f"({'DNI: '+p['dni'] if p.get('dni') else 'sin DNI'})",
                 )
-                for p in sorted(pacientes, key=lambda x: x.get("apellido",""))
+                for p in sorted(pacientes, key=lambda x: x.get("apellido", ""))
             ],
             on_select=self._on_selector,
-            width=500,
+            expand=True,
         )
 
-        # Botones de pestañas
-        self._tab_btns = []
-        for i, (lbl, icn) in enumerate(_TABS):
+        # Sub-pestañas historia clínica
+        self._tab_hist_btns = []
+        for i, (lbl, icn) in enumerate(_TABS_HISTORIA):
             btn = ft.ElevatedButton(
-                lbl,
-                icon=icn,
-                on_click=lambda e, idx=i: self._sel_tab(idx),
+                lbl, icon=icn,
+                on_click=lambda e, idx=i: self._sel_hist(idx),
                 style=ft.ButtonStyle(
                     bgcolor=ft.Colors.BLUE_700 if i == 0 else ft.Colors.GREY_200,
                     color=ft.Colors.WHITE if i == 0 else ft.Colors.GREY_800,
                 ),
             )
-            self._tab_btns.append(btn)
-        self._barra_tabs.content = ft.Row(
-            controls=self._tab_btns, spacing=6
+            self._tab_hist_btns.append(btn)
+        self._barra_hist.content = ft.Row(controls=self._tab_hist_btns, spacing=6)
+
+        # Pestañas principales
+        self._btn_nuevo    = _tab_btn("Nuevo Paciente",  ft.Icons.PERSON_ADD,
+                                      True,  lambda e: self._sel_main(0))
+        self._btn_historia = _tab_btn("Historia Clínica", ft.Icons.FOLDER_SPECIAL,
+                                      False, lambda e: self._sel_main(1))
+
+        barra_main = ft.Container(
+            content=ft.Row(controls=[
+                ft.Text("Pacientes", size=16, weight=ft.FontWeight.BOLD,
+                        color="#1565C0"),
+                ft.VerticalDivider(width=16, color=ft.Colors.TRANSPARENT),
+                self._btn_nuevo,
+                self._btn_historia,
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+            bgcolor="#E3F2FD",
+            border=ft.border.only(bottom=ft.BorderSide(1, "#BBDEFB")),
+        )
+
+        # Barra de selector (solo visible en tab Historia)
+        self._barra_selector = ft.Container(
+            visible=False,
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.PERSON_SEARCH, color="#1565C0"),
+                self.dd_selector,
+            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+            bgcolor="#FAFAFA",
+            border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
         self.controls = [
-            ft.Container(
-                content=ft.Column(controls=[
-                    ft.Row(controls=[
-                        ft.Text("Historia Clínica de Pacientes",
-                                size=18, weight=ft.FontWeight.BOLD,
-                                color="#1565C0"),
-                        ft.FilledButton(
-                            "Nuevo Paciente",
-                            icon=ft.Icons.PERSON_ADD,
-                            on_click=lambda e: self._nuevo_paciente(),
-                        ),
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    self.dd_selector,
-                ], spacing=10),
-                padding=ft.Padding.symmetric(horizontal=16, vertical=12),
-            ),
-            ft.Divider(height=1, color="#E0E0E0"),
-            self._barra_tabs,
+            barra_main,
+            self._barra_selector,
+            self._barra_hist,
             self._area,
         ]
+
+        # Arrancar mostrando el formulario de nuevo paciente
+        self._mostrar_nuevo_paciente()
+
+    # ── navegación pestañas principales ──────────────────────────────────
+
+    def _sel_main(self, idx: int):
+        if idx == self._tab_main:
+            return
+        self._tab_main = idx
+        self._actualizar_tabs_main()
+        if idx == 0:
+            self._mostrar_nuevo_paciente()
+        else:
+            self._mostrar_historia()
+
+    def _actualizar_tabs_main(self):
+        es_nuevo = (self._tab_main == 0)
+        self._btn_nuevo.style = ft.ButtonStyle(
+            bgcolor=ft.Colors.BLUE_700 if es_nuevo else ft.Colors.GREY_200,
+            color=ft.Colors.WHITE if es_nuevo else ft.Colors.GREY_800,
+        )
+        self._btn_historia.style = ft.ButtonStyle(
+            bgcolor=ft.Colors.BLUE_700 if not es_nuevo else ft.Colors.GREY_200,
+            color=ft.Colors.WHITE if not es_nuevo else ft.Colors.GREY_800,
+        )
+        if self._btn_nuevo.page:
+            self._btn_nuevo.update()
+        if self._btn_historia.page:
+            self._btn_historia.update()
+
+    # ── pestaña "Nuevo Paciente" ──────────────────────────────────────────
+
+    def _mostrar_nuevo_paciente(self):
+        self._barra_selector.visible = False
+        self._barra_hist.visible     = False
+        if self._barra_selector.page:
+            self._barra_selector.update()
+        if self._barra_hist.page:
+            self._barra_hist.update()
+        ficha = _FichaView(None, self._snack, on_creado=self._on_paciente_creado)
+        self._area.content = ficha
+        if self._area.page:
+            self._area.update()
+
+    # ── pestaña "Historia Clínica" ────────────────────────────────────────
+
+    def _mostrar_historia(self):
+        self._barra_selector.visible = True
+        if self._barra_selector.page:
+            self._barra_selector.update()
+        if self.paciente_id:
+            self._barra_hist.visible = True
+            if self._barra_hist.page:
+                self._barra_hist.update()
+            self._cargar_area_hist()
+        else:
+            self._barra_hist.visible = False
+            if self._barra_hist.page:
+                self._barra_hist.update()
+            self._area.content = ft.Column(controls=[
+                ft.Icon(ft.Icons.PERSON_SEARCH, size=52, color="#BDBDBD"),
+                ft.Text("Seleccioná un paciente para ver su historia clínica",
+                        color="#9E9E9E", size=14, italic=True),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+               alignment=ft.MainAxisAlignment.CENTER, expand=True)
+            if self._area.page:
+                self._area.update()
 
     def _on_selector(self, e):
         pid = self.dd_selector.value
@@ -1091,57 +1187,68 @@ class PacientesView(ft.Column):
                 self.page.session.set("paciente_id", pid)
             except Exception:
                 pass
-        self._tab_activo = 0
-        self._barra_tabs.visible = True
-        self._actualizar_tabs()
-        self._cargar_area()
-        if self.controls[0].page:
-            self.controls[0].update()
+        self._tab_hist = 0
+        self._actualizar_tabs_hist()
+        self._barra_hist.visible = True
+        if self._barra_hist.page:
+            self._barra_hist.update()
+        self._cargar_area_hist()
 
-    def _sel_tab(self, idx: int):
-        if idx == self._tab_activo:
+    # ── sub-pestañas historia clínica ────────────────────────────────────
+
+    def _sel_hist(self, idx: int):
+        if idx == self._tab_hist:
             return
-        self._tab_activo = idx
-        self._actualizar_tabs()
-        self._cargar_area()
+        self._tab_hist = idx
+        self._actualizar_tabs_hist()
+        self._cargar_area_hist()
 
-    def _actualizar_tabs(self):
-        for i, btn in enumerate(self._tab_btns):
-            activa = (i == self._tab_activo)
+    def _actualizar_tabs_hist(self):
+        for i, btn in enumerate(self._tab_hist_btns):
+            activa = (i == self._tab_hist)
             btn.style = ft.ButtonStyle(
                 bgcolor=ft.Colors.BLUE_700 if activa else ft.Colors.GREY_200,
                 color=ft.Colors.WHITE if activa else ft.Colors.GREY_800,
             )
             if btn.page:
                 btn.update()
-        if self._barra_tabs.page:
-            self._barra_tabs.update()
+        if self._barra_hist.page:
+            self._barra_hist.update()
 
-    def _nuevo_paciente(self):
-        """Muestra el formulario vacío para crear un nuevo paciente."""
-        self.paciente_id = None
-        self.dd_selector.value = None
-        if self.dd_selector.page:
-            self.dd_selector.update()
-        self._tab_activo = 0
-        self._barra_tabs.visible = True
-        self._actualizar_tabs()
-        ficha = _FichaView(None, self._snack, on_creado=self._on_paciente_creado)
-        self._area.content = ficha
+    def _cargar_area_hist(self):
+        if not self.paciente_id:
+            return
+        pid   = self.paciente_id
+        snack = self._snack
+        if self._tab_hist == 0:
+            contenido = _FichaView(pid, snack, on_creado=self._on_paciente_creado)
+        elif self._tab_hist == 1:
+            contenido = _AnamnesisView(pid, snack)
+        elif self._tab_hist == 2:
+            contenido = _ExploracionView(pid, snack)
+        else:
+            try:
+                h  = obtener_historia_clinica(pid) or {}
+                dd = h.get("diagnostico_dental") or {}
+            except Exception:
+                dd = {}
+            contenido = OdontogramaView(pid, dd, snack)
+
+        self._area.content = contenido
         if self._area.page:
             self._area.update()
-        if self._barra_tabs.page:
-            self._barra_tabs.update()
+
+    # ── callback post-creación ────────────────────────────────────────────
 
     def _on_paciente_creado(self, nuevo_id: str):
-        """Llamado tras crear un paciente: refresca el dropdown, selecciona y
-        recarga la ficha en modo edición para poder continuar completando datos."""
+        """Tras crear un paciente: actualiza el dropdown y cambia a Historia Clínica."""
         self.paciente_id = nuevo_id
         if self.page:
             try:
                 self.page.session.set("paciente_id", nuevo_id)
             except Exception:
                 pass
+        # Refrescar opciones del selector
         try:
             pacientes = listar_pacientes()
         except Exception:
@@ -1157,33 +1264,11 @@ class PacientesView(ft.Column):
         self.dd_selector.value = nuevo_id
         if self.dd_selector.page:
             self.dd_selector.update()
-        # Recargar la ficha en modo edición (muestra "Actualizar ficha"
-        # y habilita asignación de especialistas)
-        self._tab_activo = 0
-        self._cargar_area()
-
-    def _cargar_area(self):
-        if not self.paciente_id:
-            return
-        pid = self.paciente_id
-        snack = self._snack
-        if self._tab_activo == 0:
-            contenido = _FichaView(pid, snack, on_creado=self._on_paciente_creado)
-        elif self._tab_activo == 1:
-            contenido = _AnamnesisView(pid, snack)
-        elif self._tab_activo == 2:
-            contenido = _ExploracionView(pid, snack)
-        else:
-            try:
-                h   = obtener_historia_clinica(pid) or {}
-                dd  = h.get("diagnostico_dental") or {}
-            except Exception:
-                dd = {}
-            contenido = OdontogramaView(pid, dd, snack)
-
-        self._area.content = contenido
-        if self._area.page:
-            self._area.update()
+        # Cambiar a tab Historia Clínica para ver la ficha en modo edición
+        self._tab_main = 1
+        self._tab_hist = 0
+        self._actualizar_tabs_main()
+        self._mostrar_historia()
 
     def _snack(self, msg: str, error: bool = False):
         if self.page:
