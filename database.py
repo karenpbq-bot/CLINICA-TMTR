@@ -367,6 +367,40 @@ def obtener_usuario_por_nombre(usuario: str):
     return resultado[0] if resultado else None
 
 
+# ── HISTORIA CLÍNICA ──────────────────────────────────────────────────────
+
+def obtener_historia_clinica(paciente_id: str) -> dict | None:
+    """Devuelve la historia clínica del paciente o None si no existe."""
+    res = (
+        get_client()
+        .table("historia_clinica")
+        .select("*")
+        .eq("paciente_id", paciente_id)
+        .execute()
+        .data
+    )
+    return res[0] if res else None
+
+
+def guardar_historia_clinica(paciente_id: str, datos: dict) -> dict:
+    """
+    Upsert de historia clínica: crea si no existe, actualiza si ya existe.
+    datos debe incluir todos los campos del formulario.
+    """
+    client = get_client()
+    existente = obtener_historia_clinica(paciente_id)
+    payload = {**datos, "paciente_id": paciente_id,
+               "actualizado_en": "now()"}
+    if existente:
+        client.table("historia_clinica").update(payload).eq(
+            "paciente_id", paciente_id
+        ).execute()
+        return {**existente, **payload}
+    else:
+        res = client.table("historia_clinica").insert(payload).execute()
+        return res.data[0]
+
+
 ROLES_VALIDOS = ("Administrador", "Recepcionista", "Especialista", "Cliente")
 
 

@@ -130,6 +130,25 @@ CREATE INDEX IF NOT EXISTS idx_citas_fecha          ON citas(fecha_hora);
 CREATE INDEX IF NOT EXISTS idx_tratamientos_paciente ON tratamientos(paciente_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_paciente        ON pagos(paciente_id);
 
+-- ── HISTORIA CLÍNICA ──────────────────────────────────────────
+-- Una historia por paciente (UNIQUE paciente_id). Se usa upsert.
+CREATE TABLE IF NOT EXISTS historia_clinica (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    paciente_id       UUID REFERENCES pacientes(id) ON DELETE CASCADE UNIQUE,
+    historia_no       TEXT,
+    odontologo        TEXT,
+    fecha_elaboracion DATE DEFAULT now(),
+    motivo_consulta   TEXT,
+    enfermedad_actual TEXT,
+    signos_vitales    JSONB DEFAULT '{}',
+    antecedentes      JSONB DEFAULT '{}',
+    observaciones     TEXT,
+    creado_en         TIMESTAMPTZ DEFAULT now(),
+    actualizado_en    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_historia_paciente ON historia_clinica(paciente_id);
+
 -- ── USUARIOS ───────────────────────────────────────────────────
 -- Roles: Administrador | Recepcionista | Especialista | Cliente
 CREATE TABLE IF NOT EXISTS usuarios (
