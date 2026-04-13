@@ -116,71 +116,86 @@ _HERRAMIENTAS = [
 
 class _DienteTecnico(ft.Column):
     """
-    Diagrama geométrico de 5 superficies para una pieza dental.
-    Layout:
-        [   ] [VES] [   ]
-        [MES] [OCL] [DIS]
-        [   ] [LIN] [   ]
-        [      nº      ]
+    Diagrama geométrico rectangular de 5 superficies (estilo FDI clínico).
+    Layout del rectángulo dividido en 5 zonas:
+        ┌──────────────────┐
+        │   VESTIBULAR     │  ← franja superior completa
+        ├────────┬──┬──────┤
+        │ MESIAL │OC│DISTAL│  ← fila media con centro Oclusal
+        ├────────┴──┴──────┤
+        │   LINGUAL/PAL.   │  ← franja inferior completa
+        └──────────────────┘
+               [  nº  ]
     """
-    SZ = 10   # px por celda
+    SZ  = 13   # alto de cada franja (px)
+    SW  = 12   # ancho de Mesial/Oclusal/Distal (px cada uno)
 
     def __init__(self, numero: int, caras: dict, on_clic_cara):
         super().__init__(
             spacing=0,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        self.numero      = numero
-        self.caras       = {c: caras.get(c, "sano") for c in CARAS}
+        self.numero       = numero
+        self.caras        = {c: caras.get(c, "sano") for c in CARAS}
         self.on_clic_cara = on_clic_cara
         self._celdas: dict[str, ft.Container] = {}
         self._lbl = ft.Text(
-            str(numero), size=7.5,
+            str(numero), size=8,
             text_align=ft.TextAlign.CENTER,
-            color="#424242",
-            weight=ft.FontWeight.W_500,
+            color="#37474F", weight=ft.FontWeight.W_600,
         )
         self._construir()
 
-    def _celda(self, cara: str) -> ft.Container:
-        est = self.caras[cara]
+    # ── crea una celda con color según el estado actual ─────────────────
+    def _celda(self, cara: str, w: int, h: int) -> ft.Container:
+        est = self.caras.get(cara, "sano")
+        cfg = ESTADOS_DIENTE[est]
         c = ft.Container(
-            width=self.SZ, height=self.SZ,
-            bgcolor=ESTADOS_DIENTE[est]["color"],
-            border=ft.border.all(0.8, ESTADOS_DIENTE[est]["borde"]),
+            width=w, height=h,
+            bgcolor=cfg["color"],
+            border=ft.border.all(0.6, cfg["borde"]),
             on_click=lambda e, ca=cara: self.on_clic_cara(self.numero, ca),
-            tooltip=f"{cara.capitalize()}",
+            tooltip=cara.capitalize(),
+            alignment=ft.Alignment(0, 0),
         )
         self._celdas[cara] = c
         return c
 
-    def _vacio(self) -> ft.Container:
-        return ft.Container(width=self.SZ, height=self.SZ, bgcolor="transparent")
-
     def _construir(self):
+        W = self.SW * 3   # ancho total del diente (Mesial+Oclusal+Distal)
+        H = self.SZ       # alto de vestibular/lingual
+        # El rectángulo completo del diente
+        diente_rect = ft.Container(
+            content=ft.Column(controls=[
+                # Franja superior — Vestibular
+                self._celda("vestibular", W, H),
+                # Fila media — Mesial | Oclusal | Distal
+                ft.Row(controls=[
+                    self._celda("mesial",   self.SW, self.SW),
+                    self._celda("oclusal",  self.SW, self.SW),
+                    self._celda("distal",   self.SW, self.SW),
+                ], spacing=0),
+                # Franja inferior — Lingual / Palatino
+                self._celda("lingual", W, H),
+            ], spacing=0),
+            border=ft.border.all(1.2, "#78909C"),
+            border_radius=2,
+        )
         self.controls = [
-            ft.Row(controls=[
-                self._vacio(), self._celda("vestibular"), self._vacio(),
-            ], spacing=0),
-            ft.Row(controls=[
-                self._celda("mesial"), self._celda("oclusal"), self._celda("distal"),
-            ], spacing=0),
-            ft.Row(controls=[
-                self._vacio(), self._celda("lingual"), self._vacio(),
-            ], spacing=0),
+            diente_rect,
             ft.Container(
                 content=self._lbl,
-                width=self.SZ * 3,
-                alignment=ft.Alignment(0, 0),
+                width=W, alignment=ft.Alignment(0, 0),
+                padding=ft.padding.only(top=1),
             ),
         ]
 
     def actualizar(self, caras: dict):
         self.caras = {c: caras.get(c, "sano") for c in CARAS}
         for cara, c in self._celdas.items():
-            est = self.caras[cara]
-            c.bgcolor = ESTADOS_DIENTE[est]["color"]
-            c.border  = ft.border.all(0.8, ESTADOS_DIENTE[est]["borde"])
+            cfg = ESTADOS_DIENTE[self.caras[cara]]
+            c.bgcolor = cfg["color"]
+            c.border  = ft.border.all(0.6, cfg["borde"])
             if c.page:
                 c.update()
 
@@ -517,11 +532,28 @@ class _FichaView(ft.Column):
 class _AnamnesisView(ft.Column):
     def __init__(self, paciente_id: str, snack_fn):
         super().__init__(spacing=8, expand=True, scroll=ft.ScrollMode.AUTO)
-        self.paciente_id = paciente_id
-        self.snack_fn    = snack_fn
+        self.paciente_id  = paciente_id
+        self.snack_fn     = snack_fn
         self._historia: dict = {}
         self._sw_map: dict[str, ft.Switch] = {}
+        self._ant_visible = False   # colapsado por defecto para ganar espacio
+        self._panel_ant: ft.Container | None = None
+        self._icono_toggle: ft.Icon | None = None
         self._construir()
+
+    # ── Toggle expandir/colapsar antecedentes ─────────────────────────────
+    def _toggle_ant(self, e):
+        self._ant_visible = not self._ant_visible
+        if self._panel_ant:
+            self._panel_ant.visible = self._ant_visible
+            if self._panel_ant.page:
+                self._panel_ant.update()
+        if self._icono_toggle:
+            self._icono_toggle.name = (
+                ft.Icons.EXPAND_LESS if self._ant_visible else ft.Icons.EXPAND_MORE
+            )
+            if self._icono_toggle.page:
+                self._icono_toggle.update()
 
     def _construir(self):
         try:
@@ -535,33 +567,71 @@ class _AnamnesisView(ft.Column):
 
         # ── 21 switches ───────────────────────────────────────────────────
         self._sw_map = {}
-        col_izq = ft.Column(spacing=2)
-        col_der = ft.Column(spacing=2)
+        col_izq = ft.Column(spacing=1)
+        col_der = ft.Column(spacing=1)
         mitad   = (len(ANTECEDENTES) + 1) // 2
 
+        positivos = sum(1 for key, _ in ANTECEDENTES if ant.get(key, False))
+
         for i, (key, label) in enumerate(ANTECEDENTES):
+            activo = bool(ant.get(key, False))
             sw = ft.Switch(
-                value=bool(ant.get(key, False)),
+                value=activo,
                 active_color=ft.Colors.BLUE_700,
             )
             self._sw_map[key] = sw
-            fila = ft.Row(controls=[sw,
-                ft.Text(label, size=12, expand=True)],
-                spacing=4,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            )
+            fila = ft.Row(controls=[
+                sw,
+                ft.Text(label, size=11, expand=True,
+                        color="#C62828" if activo else "#424242"),
+            ], spacing=2, vertical_alignment=ft.CrossAxisAlignment.CENTER)
             (col_izq if i < mitad else col_der).controls.append(fila)
 
+        self._icono_toggle = ft.Icon(
+            ft.Icons.EXPAND_MORE, size=20, color="#FFFFFF"
+        )
+        resumen_txt = (f"{positivos} positivo(s)"
+                       if positivos else "ninguno positivo")
+        cabecera_ant = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.HEALTH_AND_SAFETY, size=16, color="#FFFFFF"),
+                ft.Text(f"ANTECEDENTES MÉDICOS Y ODONTOLÓGICOS — {resumen_txt}",
+                        size=12, weight=ft.FontWeight.BOLD, color="#FFFFFF",
+                        expand=True),
+                self._icono_toggle,
+            ], spacing=8),
+            bgcolor="#1565C0", border_radius=5,
+            padding=ft.padding.symmetric(horizontal=12, vertical=7),
+            margin=ft.margin.only(top=8, bottom=0),
+            on_click=self._toggle_ant,
+            ink=True,
+        )
+
+        self._panel_ant = ft.Container(
+            visible=self._ant_visible,
+            content=ft.Row(controls=[
+                ft.Container(content=col_izq, expand=True),
+                ft.VerticalDivider(width=1, color="#E0E0E0"),
+                ft.Container(content=col_der, expand=True),
+            ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+            border=ft.border.all(1, "#BBDEFB"),
+            border_radius=ft.border_radius.only(
+                bottom_left=6, bottom_right=6
+            ),
+            padding=10,
+            margin=ft.margin.only(bottom=4),
+        )
+
         # ── Constantes vitales ─────────────────────────────────────────────
-        self.tf_presion  = _tf("Presión (mmHg)", sv.get("tension_arterial",""),
-                                width=150, hint="120/80")
-        self.tf_peso     = _tf("Peso (kg)", sv.get("peso",""), width=110)
-        self.tf_talla    = _tf("Talla (cm)", sv.get("estatura",""), width=110)
-        self.tf_pulso    = _tf("Pulso (bpm)", sv.get("pulso",""), width=110)
-        self.tf_temp     = _tf("Temp. (°C)", sv.get("temperatura",""), width=110)
-        self.tf_fr       = _tf("F.R. (rpm)", sv.get("frecuencia_resp",""), width=110)
-        self.lbl_imc     = ft.Text("IMC: —", size=13, color="#1565C0",
-                                   weight=ft.FontWeight.W_600)
+        self.tf_presion = _tf("Presión (mmHg)", sv.get("tension_arterial",""),
+                               width=150, hint="120/80")
+        self.tf_peso    = _tf("Peso (kg)",  sv.get("peso",""),      width=110)
+        self.tf_talla   = _tf("Talla (cm)", sv.get("estatura",""),  width=110)
+        self.tf_pulso   = _tf("Pulso (bpm)", sv.get("pulso",""),    width=110)
+        self.tf_temp    = _tf("Temp. (°C)", sv.get("temperatura",""), width=110)
+        self.tf_fr      = _tf("F.R. (rpm)", sv.get("frecuencia_resp",""), width=110)
+        self.lbl_imc    = ft.Text("IMC: —", size=13, color="#1565C0",
+                                  weight=ft.FontWeight.W_600)
 
         def calc_imc(e):
             try:
@@ -581,18 +651,8 @@ class _AnamnesisView(ft.Column):
         self.tf_talla.on_blur = calc_imc
 
         self.controls = [
-            _titulo("ANTECEDENTES MÉDICOS Y ODONTOLÓGICOS (21 ítem)",
-                    ft.Icons.HEALTH_AND_SAFETY),
-            ft.Container(
-                content=ft.Row(controls=[
-                    ft.Container(content=col_izq, expand=True),
-                    ft.VerticalDivider(width=1, color="#E0E0E0"),
-                    ft.Container(content=col_der, expand=True),
-                ], spacing=12,
-                   vertical_alignment=ft.CrossAxisAlignment.START),
-                border=ft.border.all(1, "#E0E0E0"),
-                border_radius=6, padding=10,
-            ),
+            cabecera_ant,
+            self._panel_ant,
             _titulo("CONSTANTES VITALES", ft.Icons.MONITOR_HEART),
             ft.Row(controls=[
                 self.tf_presion, self.tf_pulso, self.tf_temp, self.tf_fr,
