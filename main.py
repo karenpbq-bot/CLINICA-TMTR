@@ -7,6 +7,7 @@ from especialistas import EspecialistasView
 from modulo_agenda import AgendaView
 from modulo_tratamientos import TratamientosView
 from modulo_pagos import PagosView
+from modulo_usuarios import UsuariosView
 
 # ── Autenticación ──────────────────────────────────────────────────────────
 # Credenciales del administrador almacenadas en variables de entorno.
@@ -32,7 +33,7 @@ def _verificar_credenciales(usuario: str, password: str) -> dict | None:
 INACTIVIDAD_SEGUNDOS = 300
 PORT = int(os.environ.get("PORT", 8000))
 
-RUTAS = [
+RUTAS_BASE = [
     ("/pacientes",    "Pacientes",    ft.Icons.PEOPLE),
     ("/especialistas","Especialistas",ft.Icons.MEDICAL_SERVICES),
     ("/agenda",       "Agenda",       ft.Icons.CALENDAR_MONTH),
@@ -40,15 +41,24 @@ RUTAS = [
     ("/pagos",        "Pagos",        ft.Icons.ATTACH_MONEY),
 ]
 
+RUTA_ADMIN = ("/usuarios", "Usuarios", ft.Icons.MANAGE_ACCOUNTS)
+
 VISTAS = {
     "/pacientes":     lambda: PacientesView(),
     "/especialistas": lambda: EspecialistasView(),
     "/agenda":        lambda: AgendaView(),
     "/tratamientos":  lambda: TratamientosView(),
     "/pagos":         lambda: PagosView(),
+    "/usuarios":      lambda: UsuariosView(),
 }
 
-INDICE_RUTA = {r[0]: i for i, r in enumerate(RUTAS)}
+
+def _rutas_para_rol(rol: str) -> list:
+    """Devuelve la lista de rutas según el rol del usuario."""
+    rutas = list(RUTAS_BASE)
+    if rol == "Administrador":
+        rutas.append(RUTA_ADMIN)
+    return rutas
 
 
 async def main(page: ft.Page):
@@ -162,11 +172,15 @@ def _login_view(page: ft.Page) -> ft.View:
 
 
 def _app_shell(route: str, page: ft.Page) -> ft.View:
+    rol   = (page.data or {}).get("rol", "")
+    rutas = _rutas_para_rol(rol)
+    indice_ruta = {r[0]: i for i, r in enumerate(rutas)}
+
     ruta_activa = route if route in VISTAS else "/pacientes"
-    idx_activo  = INDICE_RUTA.get(ruta_activa, 0)
+    idx_activo  = indice_ruta.get(ruta_activa, 0)
 
     async def on_nav(e):
-        ruta_destino = RUTAS[e.control.selected_index][0]
+        ruta_destino = rutas[e.control.selected_index][0]
         await page.push_route(ruta_destino)
 
     async def cerrar_sesion(e):
@@ -183,7 +197,7 @@ def _app_shell(route: str, page: ft.Page) -> ft.View:
                 selected_icon=ft.Icon(icon, color=ft.Colors.BLUE_700),
                 label=label,
             )
-            for _, label, icon in RUTAS
+            for _, label, icon in rutas
         ],
         trailing=ft.IconButton(
             icon=ft.Icons.LOGOUT,

@@ -377,6 +377,50 @@ def registrar_acceso(usuario_id: str):
     ).eq("id", usuario_id).execute()
 
 
+def listar_usuarios() -> list[dict]:
+    """Lista todos los usuarios del sistema."""
+    return (
+        get_client()
+        .table("usuarios")
+        .select("id,usuario,nombre,rol,activo,creado_en,ultimo_acceso")
+        .order("creado_en")
+        .execute()
+        .data
+    )
+
+
+def crear_usuario(datos: dict) -> dict:
+    """
+    Crea un nuevo usuario.
+    datos: {usuario, password, nombre, rol}
+    """
+    import bcrypt as _bcrypt
+    hash_ = _bcrypt.hashpw(datos["password"].encode(), _bcrypt.gensalt()).decode()
+    payload = {
+        "usuario":       datos["usuario"],
+        "password_hash": hash_,
+        "nombre":        datos.get("nombre", ""),
+        "rol":           datos.get("rol", "Recepcionista"),
+        "activo":        True,
+    }
+    result = get_client().table("usuarios").insert(payload).execute()
+    return result.data[0]
+
+
+def actualizar_usuario(usuario_id: str, datos: dict):
+    """Actualiza nombre, rol o estado activo de un usuario."""
+    get_client().table("usuarios").update(datos).eq("id", usuario_id).execute()
+
+
+def cambiar_password_usuario(usuario_id: str, nueva_password: str):
+    """Cambia la contraseña de un usuario (genera nuevo hash bcrypt)."""
+    import bcrypt as _bcrypt
+    hash_ = _bcrypt.hashpw(nueva_password.encode(), _bcrypt.gensalt()).decode()
+    get_client().table("usuarios").update(
+        {"password_hash": hash_}
+    ).eq("id", usuario_id).execute()
+
+
 # ── SALDO ─────────────────────────────────────────────────────────────────
 
 def saldo_pendiente(paciente_id: str) -> float:
