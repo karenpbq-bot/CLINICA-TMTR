@@ -835,7 +835,7 @@ class PacientesView(ft.Column):
         self._tab_activo = 0
         self._tab_btns: list[ft.ElevatedButton] = []
         self._area = ft.Container(
-            expand=True, padding=ft.padding.all(16),
+            expand=True, padding=ft.Padding.all(16),
             content=ft.Column(controls=[
                 ft.Icon(ft.Icons.PERSON_SEARCH, size=48, color="#BDBDBD"),
                 ft.Text("Seleccioná un paciente para ver su historia clínica",
@@ -961,10 +961,7 @@ class PacientesView(ft.Column):
                 dd = {}
             contenido = OdontogramaView(pid, dd, snack)
 
-        self._area.content = ft.Container(
-            content=contenido, expand=True,
-            padding=ft.padding.all(16),
-        )
+        self._area.content = contenido
         if self._area.page:
             self._area.update()
 
