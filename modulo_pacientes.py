@@ -586,7 +586,7 @@ class _EspecialistasPanel(ft.Column):
 class _FichaView(ft.ListView):
     """Formulario de ficha del paciente en un ListView siempre scrollable."""
     def __init__(self, paciente_id: str | None, snack_fn, on_creado=None):
-        super().__init__(spacing=8, expand=True, padding=ft.Padding.all(2))
+        super().__init__(spacing=8, padding=ft.Padding.all(2))
         self.paciente_id = paciente_id
         self.snack_fn    = snack_fn
         self._on_creado  = on_creado   # callback(nuevo_id) tras crear
@@ -707,7 +707,7 @@ class _FichaView(ft.ListView):
 
 class _AnamnesisView(ft.ListView):
     def __init__(self, paciente_id: str, snack_fn):
-        super().__init__(spacing=8, expand=True, padding=ft.Padding.all(2))
+        super().__init__(spacing=8, padding=ft.Padding.all(2))
         self.paciente_id  = paciente_id
         self.snack_fn     = snack_fn
         self._historia: dict = {}
@@ -887,7 +887,7 @@ class _AnamnesisView(ft.ListView):
 
 class _ExploracionView(ft.ListView):
     def __init__(self, paciente_id: str, snack_fn):
-        super().__init__(spacing=8, expand=True, padding=ft.Padding.all(2))
+        super().__init__(spacing=8, padding=ft.Padding.all(2))
         self.paciente_id = paciente_id
         self.snack_fn    = snack_fn
         self._historia: dict = {}
@@ -1029,8 +1029,8 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
-        # Índice donde se coloca el contenido activo en self.controls
-        self._IDX_CONTENIDO = 3
+        # Área de contenido principal: se llena en did_mount()
+        self._area = ft.Container(expand=True, padding=ft.Padding.all(16))
 
         self._construir()
 
@@ -1103,19 +1103,30 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
-        # Contenido inicial: formulario nuevo paciente puesto directamente
-        # en controls[3] — sin Container intermedio para evitar conflictos
-        # de layout expand en Flet 0.84.
-        ficha_inicial = _FichaView(
+        # _area se llena en did_mount() una vez que está en la página
+        self.controls = [
+            barra_main,
+            self._barra_selector,
+            self._barra_hist,
+            self._area,
+        ]
+
+    # ── ciclo de vida ─────────────────────────────────────────────────────
+
+    def did_mount(self):
+        """Carga el formulario inicial después de que el control está en la página."""
+        self._area.content = _FichaView(
             None, self._snack, on_creado=self._on_paciente_creado
         )
+        self._area.update()
 
-        self.controls = [
-            barra_main,             # índice 0
-            self._barra_selector,   # índice 1
-            self._barra_hist,       # índice 2
-            ficha_inicial,          # índice 3 — contenido activo
-        ]
+    # ── helpers de contenido ──────────────────────────────────────────────
+
+    def _set_contenido(self, nuevo):
+        """Reemplaza el contenido de _area y actualiza."""
+        self._area.content = nuevo
+        if self._area.page:
+            self._area.update()
 
     # ── navegación pestañas principales ──────────────────────────────────
 
