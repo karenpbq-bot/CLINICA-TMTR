@@ -367,6 +367,9 @@ def obtener_usuario_por_nombre(usuario: str):
     return resultado[0] if resultado else None
 
 
+ROLES_VALIDOS = ("Administrador", "Recepcionista", "Especialista", "Cliente")
+
+
 def registrar_acceso(usuario_id: str):
     """Actualiza el campo ultimo_acceso con la hora actual."""
     get_client().table("usuarios").update(

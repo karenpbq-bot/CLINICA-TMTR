@@ -26,7 +26,7 @@ def _verificar_credenciales(usuario: str, password: str) -> dict | None:
     if usuario != _ADMIN_USUARIO:
         return None
     if _ADMIN_HASH and bcrypt.checkpw(password.encode(), _ADMIN_HASH):
-        return {"usuario": usuario, "nombre": "Administrador", "rol": "administrador"}
+        return {"usuario": usuario, "nombre": "Administrador", "rol": "Administrador"}
     return None
 
 INACTIVIDAD_SEGUNDOS = 300
