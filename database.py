@@ -401,6 +401,20 @@ def guardar_historia_clinica(paciente_id: str, datos: dict) -> dict:
         return res.data[0]
 
 
+def actualizar_diagnostico_dental(paciente_id: str, diagnostico_dental: dict):
+    """Guarda/actualiza solo el campo diagnostico_dental en historia_clinica."""
+    client = get_client()
+    existente = obtener_historia_clinica(paciente_id)
+    if existente:
+        client.table("historia_clinica").update(
+            {"diagnostico_dental": diagnostico_dental, "actualizado_en": "now()"}
+        ).eq("paciente_id", paciente_id).execute()
+    else:
+        client.table("historia_clinica").insert(
+            {"paciente_id": paciente_id, "diagnostico_dental": diagnostico_dental}
+        ).execute()
+
+
 ROLES_VALIDOS = ("Administrador", "Recepcionista", "Especialista", "Cliente")
 
 

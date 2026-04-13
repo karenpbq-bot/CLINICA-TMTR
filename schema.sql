@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS historia_clinica (
     enfermedad_actual TEXT,
     signos_vitales    JSONB DEFAULT '{}',
     antecedentes      JSONB DEFAULT '{}',
+    diagnostico_dental JSONB DEFAULT '{}',
     observaciones     TEXT,
     creado_en         TIMESTAMPTZ DEFAULT now(),
     actualizado_en    TIMESTAMPTZ DEFAULT now()
