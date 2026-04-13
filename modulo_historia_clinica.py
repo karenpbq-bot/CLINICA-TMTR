@@ -236,14 +236,14 @@ class _DetalleDiente(ft.Column):
 
         superficie = ft.Column(controls=[
             ft.Row(controls=[self._celda_grande("vestibular")],
-                   main_axis_alignment=ft.MainAxisAlignment.CENTER),
+                   alignment=ft.MainAxisAlignment.CENTER),
             ft.Row(controls=[
                 self._celda_grande("mesial"),
                 self._celda_grande("oclusal"),
                 self._celda_grande("distal"),
-            ], spacing=6, main_axis_alignment=ft.MainAxisAlignment.CENTER),
+            ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
             ft.Row(controls=[self._celda_grande("lingual")],
-                   main_axis_alignment=ft.MainAxisAlignment.CENTER),
+                   alignment=ft.MainAxisAlignment.CENTER),
         ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         self.controls = [
@@ -324,7 +324,7 @@ class OdontogramaDiagnosticoView(ft.Column):
                 ft.Text("Seleccioná una pieza dental",
                         color="#9E9E9E", italic=True, size=13),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-               main_axis_alignment=ft.MainAxisAlignment.CENTER,
+               alignment=ft.MainAxisAlignment.CENTER,
                expand=True),
         )
         self._construir_layout()
