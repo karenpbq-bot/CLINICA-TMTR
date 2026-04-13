@@ -250,7 +250,7 @@ class _DetalleDiente(ft.Column):
             # Encabezado de la pieza
             ft.Container(
                 content=ft.Row(controls=[
-                    ft.Icon(ft.Icons.DENTISTRY, color="#1565C0", size=22),
+                    ft.Icon(ft.Icons.MEDICAL_SERVICES, color="#1565C0", size=22),
                     ft.Column(controls=[
                         ft.Text(f"Pieza {self.numero}",
                                 size=16, weight=ft.FontWeight.BOLD),
@@ -630,7 +630,7 @@ class HistoriaClinicaView(ft.Column):
 
             # 5. Odontograma Diagnóstico
             _seccion("5. ODONTOGRAMA Y DIAGNÓSTICO POR PIEZA",
-                     ft.Icons.DENTISTRY),
+                     ft.Icons.MEDICAL_SERVICES),
             ft.Text(
                 "Clic en un diente → marcá las superficies afectadas y escribí el diagnóstico → "
                 "«Guardar pieza». El indicador azul debajo del número marca piezas con diagnóstico.",
