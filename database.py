@@ -297,6 +297,10 @@ def cancelar_cita(cita_id: str):
     return actualizar_cita(cita_id, {"estado": "cancelada"})
 
 
+def eliminar_cita(cita_id: str):
+    return get_client().table("citas").delete().eq("id", cita_id).execute().data
+
+
 # ── TRATAMIENTOS ──────────────────────────────────────────────────────────
 
 def listar_tratamientos(paciente_id: str):
@@ -321,6 +325,10 @@ def actualizar_tratamiento(tratamiento_id: str, datos: dict):
     )
 
 
+def eliminar_tratamiento(tratamiento_id: str):
+    return get_client().table("tratamientos").delete().eq("id", tratamiento_id).execute().data
+
+
 # ── PAGOS ─────────────────────────────────────────────────────────────────
 
 def listar_pagos(paciente_id: str):
@@ -337,6 +345,10 @@ def listar_pagos(paciente_id: str):
 
 def registrar_pago(datos: dict):
     return get_client().table("pagos").insert(datos).execute().data
+
+
+def eliminar_pago(pago_id: str):
+    return get_client().table("pagos").delete().eq("id", pago_id).execute().data
 
 
 def saldo_pendiente(paciente_id: str) -> float:
