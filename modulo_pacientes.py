@@ -463,7 +463,7 @@ class PacientesView(ft.Row):
     def _mostrar_detalle(self, paciente: dict):
         tabs = [
             ft.Tab(
-                text="Ficha Clínica", icon=ft.Icons.PERSON,
+                label="Ficha Clínica", icon=ft.Icons.PERSON,
                 content=ft.Container(
                     content=FichaClinicaView(paciente,
                                              on_guardado=self._on_guardado,
@@ -475,14 +475,14 @@ class PacientesView(ft.Row):
         if paciente.get("id"):
             tabs += [
                 ft.Tab(
-                    text="Constantes Vitales", icon=ft.Icons.MONITOR_HEART,
+                    label="Constantes Vitales", icon=ft.Icons.MONITOR_HEART,
                     content=ft.Container(
                         content=ConstantesView(paciente["id"], snack_fn=self._snack),
                         padding=16,
                     ),
                 ),
                 ft.Tab(
-                    text="Odontograma", icon=ft.Icons.GRID_VIEW,
+                    label="Odontograma", icon=ft.Icons.GRID_VIEW,
                     content=ft.Container(
                         content=OdontogramaView(paciente["id"], snack_fn=self._snack),
                         padding=16,

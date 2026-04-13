@@ -112,7 +112,7 @@ class UsuariosView(ft.Column):
                         spacing=10,
                     ),
                     padding=40,
-                    alignment=ft.alignment.center,
+                    alignment=ft.Alignment(0, 0),
                 )
             ]
             if self._lista.page:
