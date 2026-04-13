@@ -416,22 +416,29 @@ class OdontogramaView(ft.Column):
             expand=True,
         )
 
-        self.controls = [
-            ft.Container(
-                content=ft.Column(controls=[
-                    ft.Text("Herramienta activa:",
-                            size=12, weight=ft.FontWeight.W_500),
+        leyenda = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Text("Herramienta:", size=11,
+                            weight=ft.FontWeight.W_500, color="#616161"),
                     herr_row,
-                ], spacing=6),
-                bgcolor="#F8F8F8",
-                border=ft.border.all(1, "#E0E0E0"),
-                border_radius=6, padding=10,
+                ],
+                spacing=8,
+                wrap=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
+            bgcolor="#F5F5F5",
+            border=ft.border.only(top=ft.BorderSide(1, "#E0E0E0")),
+            padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+        )
+
+        self.controls = [
             ft.Row(controls=[
-                cuadricula,           # scroll ya está en el Column interno
+                cuadricula,
                 self._panel_diag,
             ], spacing=10, expand=True,
                vertical_alignment=ft.CrossAxisAlignment.START),
+            leyenda,
         ]
 
 
