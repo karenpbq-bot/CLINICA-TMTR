@@ -427,8 +427,11 @@ class OdontogramaView(ft.Column):
                 border_radius=6, padding=10,
             ),
             ft.Row(controls=[
-                ft.Container(content=cuadricula,
-                             expand=True, scroll=ft.ScrollMode.HORIZONTAL),
+                ft.Container(
+                    content=cuadricula,
+                    expand=True,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
                 self._panel_diag,
             ], spacing=10, expand=True,
                vertical_alignment=ft.CrossAxisAlignment.START),
