@@ -165,7 +165,7 @@ class FormularioEspecialista(ft.Column):
             ft.Divider(),
             ft.Text("Especialidades", size=14, weight=ft.FontWeight.BOLD, color="#1565C0"),
             ft.ResponsiveRow(controls=cbs),
-            ft.ElevatedButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
+            ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
         ]
         if e.get("id"):
             controles += [ft.Divider(), DisponibilidadEditor(e["id"], snack_fn=self.snack_fn)]
@@ -183,7 +183,7 @@ class EspecialistasView(ft.Row):
         panel_izq = ft.Container(
             content=ft.Column(controls=[
                 ft.Text("Especialistas", size=16, weight=ft.FontWeight.BOLD),
-                ft.ElevatedButton("+ Nuevo", icon=ft.Icons.PERSON_ADD,
+                ft.FilledButton("+ Nuevo", icon=ft.Icons.PERSON_ADD,
                                   on_click=lambda e: self._seleccionar({})),
                 ft.Divider(height=4),
                 self._lista_col,

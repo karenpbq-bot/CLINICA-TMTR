@@ -89,7 +89,7 @@ class FormularioTratamiento(ft.Column):
             ft.Row(controls=[self.dd_diente, self.dd_cara, self.tf_costo], spacing=8),
             ft.Row(controls=[self.dd_tipo, self.dd_especialista], spacing=8),
             ft.Row(controls=[self.dd_estado], spacing=8),
-            ft.ElevatedButton("Guardar Ítem", icon=ft.Icons.SAVE, on_click=self._guardar),
+            ft.FilledButton("Guardar Ítem", icon=ft.Icons.SAVE, on_click=self._guardar),
         ]
 
     def _guardar(self, e):
@@ -205,7 +205,7 @@ class TratamientosView(ft.Column):
             ft.Row(controls=[
                 ft.Text(f"Total presupuestado: $ {total:.2f}",
                         size=14, weight=ft.FontWeight.W_600),
-                ft.ElevatedButton(
+                ft.FilledButton(
                     "- Cerrar" if self._mostrar_form else "+ Agregar ítem",
                     icon=ft.Icons.REMOVE if self._mostrar_form else ft.Icons.ADD,
                     on_click=lambda e: self._toggle_form(),

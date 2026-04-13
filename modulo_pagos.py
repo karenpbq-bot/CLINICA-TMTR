@@ -62,7 +62,7 @@ class FormularioPago(ft.Column):
             ft.Row(controls=[self.tf_monto, self.dd_metodo], spacing=8),
             self.tf_comprob,
             self.tf_notas,
-            ft.ElevatedButton("Confirmar Pago", icon=ft.Icons.PAYMENT,
+            ft.FilledButton("Confirmar Pago", icon=ft.Icons.PAYMENT,
                               on_click=self._guardar),
         ]
 
@@ -153,7 +153,7 @@ class PagosView(ft.Column):
         # Formulario de pago
         self._form_area.controls = [
             ft.Row(controls=[
-                ft.ElevatedButton(
+                ft.FilledButton(
                     "- Cerrar" if self._mostrar_form else "+ Registrar Pago",
                     icon=ft.Icons.REMOVE if self._mostrar_form else ft.Icons.ADD,
                     on_click=lambda e: self._toggle_form(),

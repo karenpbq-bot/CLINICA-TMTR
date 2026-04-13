@@ -1,0 +1,16 @@
+kind = "web"
+previewPath = "/"
+title = "Consultorio Odontológico"
+version = "1.0.0"
+id = "e918e8fa-6ac0-4f1a-8ff1-a1c09fd77253"
+
+[[services]]
+localPort = 9000
+name = "Consultorio Odontológico"
+paths = ["/"]
+
+[services.env]
+PORT = "9000"
+
+[services.development]
+run = "python3 main.py"

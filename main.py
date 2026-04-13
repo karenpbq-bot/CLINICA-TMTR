@@ -11,7 +11,7 @@ INACTIVIDAD_SEGUNDOS = 300  # 5 minutos
 PORT = int(os.environ.get("PORT", 8000))
 
 
-def main(page: ft.Page):
+async def main(page: ft.Page):
     page.title = "Consultorio Odontológico"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
@@ -27,8 +27,7 @@ def main(page: ft.Page):
         inactividad_timer.start()
 
     def cerrar_sesion():
-        page.session.clear()
-        page.push_route("/login")
+        page.go("/login")
         page.update()
 
     def on_route_change(e: ft.RouteChangeEvent):
@@ -51,16 +50,15 @@ def main(page: ft.Page):
     page.on_view_pop = on_view_pop
     page.on_keyboard_event = lambda _: reiniciar_timer()
 
-    page.push_route("/login")
+    await page.push_route("/login")
 
 
 def login_view(page: ft.Page):
     def ingresar(e):
-        # TODO: validar credenciales contra Supabase
-        page.push_route("/pacientes")
+        page.go("/pacientes")
 
     return ft.View(
-        "/login",
+        route="/login",
         controls=[
             ft.Container(
                 content=ft.Column(
@@ -92,7 +90,7 @@ def login_view(page: ft.Page):
                             width=320,
                             on_submit=ingresar,
                         ),
-                        ft.ElevatedButton(
+                        ft.FilledButton(
                             "Ingresar",
                             width=320,
                             height=44,
@@ -103,7 +101,7 @@ def login_view(page: ft.Page):
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=14,
                 ),
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment.CENTER,
                 expand=True,
                 bgcolor=ft.Colors.WHITE,
             )
@@ -153,7 +151,7 @@ def app_shell(route: str, page: ft.Page):
     contenido = vista_fn()
 
     return ft.View(
-        route,
+        route=route,
         controls=[
             ft.Row(
                 controls=[

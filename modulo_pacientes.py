@@ -257,7 +257,7 @@ class ConstantesView(ft.Column):
                     size=14, weight=ft.FontWeight.BOLD),
             ft.Row(controls=[self.tf_psys, self.tf_pdia, self.tf_pulso], spacing=8),
             ft.Row(controls=[self.tf_peso, self.tf_altura, self.tf_imc], spacing=8),
-            ft.ElevatedButton("Registrar", icon=ft.Icons.MONITOR_HEART,
+            ft.FilledButton("Registrar", icon=ft.Icons.MONITOR_HEART,
                               on_click=self._guardar),
             ft.Divider(),
             ft.Text("Últimos 5 registros", size=13, weight=ft.FontWeight.W_500),
@@ -355,7 +355,7 @@ class FichaClinicaView(ft.Column):
             ft.ResponsiveRow(controls=cbs),
             self.tf_alergias,
             ft.Divider(),
-            ft.ElevatedButton(
+            ft.FilledButton(
                 "Guardar Ficha" if p.get("id") else "Crear Paciente",
                 icon=ft.Icons.SAVE,
                 on_click=self._guardar,
@@ -383,7 +383,7 @@ class PacientesView(ft.Row):
             content=ft.Column(controls=[
                 ft.Text("Pacientes", size=16, weight=ft.FontWeight.BOLD),
                 self._tf_buscar,
-                ft.ElevatedButton("+ Nuevo Paciente", icon=ft.Icons.PERSON_ADD,
+                ft.FilledButton("+ Nuevo Paciente", icon=ft.Icons.PERSON_ADD,
                                   on_click=lambda e: self._seleccionar({})),
                 ft.Divider(height=4),
                 self._lista_col,

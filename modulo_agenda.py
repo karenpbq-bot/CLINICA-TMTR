@@ -77,7 +77,7 @@ class FormularioCita(ft.Column):
             self.tf_motivo,
             self.tf_notas,
             ft.Row(controls=[
-                ft.ElevatedButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
+                ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
                 ft.OutlinedButton("Cancelar cita", icon=ft.Icons.CANCEL,
                                   on_click=self._cancelar,
                                   visible=bool(self.cita.get("id"))),
@@ -150,7 +150,7 @@ class AgendaView(ft.Row):
         panel_izq = ft.Container(
             content=ft.Column(controls=[
                 ft.Text("Agenda de Citas", size=16, weight=ft.FontWeight.BOLD),
-                ft.ElevatedButton("+ Nueva Cita", icon=ft.Icons.ADD,
+                ft.FilledButton("+ Nueva Cita", icon=ft.Icons.ADD,
                                   on_click=lambda e: self._seleccionar({})),
                 ft.Divider(height=4),
                 self._lista_col,
