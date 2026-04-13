@@ -623,6 +623,21 @@ class _FichaView(ft.Column):
         lbl_btn = "Actualizar ficha" if self.paciente_id else "Crear paciente"
 
         self.controls = [
+            # Botón siempre visible al inicio del formulario
+            ft.Container(
+                content=ft.Row(controls=[
+                    ft.Icon(ft.Icons.PERSON_ADD if not self.paciente_id else ft.Icons.EDIT,
+                            size=18, color=ft.Colors.WHITE),
+                    ft.Text(lbl_btn, size=13, color=ft.Colors.WHITE,
+                            weight=ft.FontWeight.W_500),
+                ], spacing=8, tight=True),
+                bgcolor=ft.Colors.BLUE_700,
+                border_radius=8,
+                padding=ft.Padding.symmetric(vertical=10, horizontal=20),
+                on_click=self._guardar,
+                ink=True,
+            ),
+            ft.Divider(height=8, color=ft.Colors.TRANSPARENT),
             _titulo("DATOS PERSONALES", ft.Icons.PERSON),
             ft.Row(controls=[self.tf_nombre, self.tf_apellido], spacing=10),
             ft.Row(controls=[self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10, wrap=True),
@@ -1119,7 +1134,8 @@ class PacientesView(ft.Column):
             self._barra_tabs.update()
 
     def _on_paciente_creado(self, nuevo_id: str):
-        """Llamado tras crear un paciente: refresca el dropdown y lo selecciona."""
+        """Llamado tras crear un paciente: refresca el dropdown, selecciona y
+        recarga la ficha en modo edición para poder continuar completando datos."""
         self.paciente_id = nuevo_id
         if self.page:
             try:
@@ -1141,6 +1157,10 @@ class PacientesView(ft.Column):
         self.dd_selector.value = nuevo_id
         if self.dd_selector.page:
             self.dd_selector.update()
+        # Recargar la ficha en modo edición (muestra "Actualizar ficha"
+        # y habilita asignación de especialistas)
+        self._tab_activo = 0
+        self._cargar_area()
 
     def _cargar_area(self):
         if not self.paciente_id:
