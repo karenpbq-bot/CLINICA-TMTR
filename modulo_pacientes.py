@@ -410,9 +410,10 @@ class OdontogramaView(ft.Column):
                     border=ft.border.all(1, "#F48FB1"),
                     border_radius=4, padding=6,
                 ),
-            ], spacing=4),
+            ], spacing=4, scroll=ft.ScrollMode.AUTO),  # scroll en Column, no en Container
             border=ft.border.all(1, "#E0E0E0"),
             border_radius=6, padding=10,
+            expand=True,
         )
 
         self.controls = [
@@ -427,11 +428,7 @@ class OdontogramaView(ft.Column):
                 border_radius=6, padding=10,
             ),
             ft.Row(controls=[
-                ft.Container(
-                    content=cuadricula,
-                    expand=True,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
+                cuadricula,           # scroll ya está en el Column interno
                 self._panel_diag,
             ], spacing=10, expand=True,
                vertical_alignment=ft.CrossAxisAlignment.START),
