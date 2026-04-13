@@ -1157,12 +1157,6 @@ class PacientesView(ft.Column):
 
     # ── pestaña "Nuevo Paciente" ──────────────────────────────────────────
 
-    def _set_contenido(self, nuevo):
-        """Reemplaza controls[3] con el nuevo contenido y actualiza."""
-        self.controls[self._IDX_CONTENIDO] = nuevo
-        if self.page:
-            self.update()
-
     def _mostrar_nuevo_paciente(self):
         self._barra_selector.visible = False
         self._barra_hist.visible     = False
