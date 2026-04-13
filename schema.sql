@@ -130,8 +130,25 @@ CREATE INDEX IF NOT EXISTS idx_citas_fecha          ON citas(fecha_hora);
 CREATE INDEX IF NOT EXISTS idx_tratamientos_paciente ON tratamientos(paciente_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_paciente        ON pagos(paciente_id);
 
+-- ── USUARIOS ───────────────────────────────────────────────────
+-- Roles: Administrador | Recepcionista | Especialista | Cliente
+CREATE TABLE IF NOT EXISTS usuarios (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario       TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    nombre        TEXT,
+    rol           TEXT NOT NULL DEFAULT 'Recepcionista'
+                  CHECK (rol IN ('Administrador','Recepcionista','Especialista','Cliente')),
+    activo        BOOLEAN NOT NULL DEFAULT true,
+    creado_en     TIMESTAMPTZ DEFAULT now(),
+    ultimo_acceso TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
+
 -- ── Row Level Security (recomendado activar luego) ────────────
 -- ALTER TABLE pacientes ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE odontograma ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE citas ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 -- (Agregar políticas según roles de usuario cuando se implemente auth)
