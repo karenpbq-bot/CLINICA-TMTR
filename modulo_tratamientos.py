@@ -248,6 +248,11 @@ class TratamientosView(ft.Column):
 
     def _on_selector(self, e):
         self.paciente_id = self.dd_selector.value
+        if self.page and self.paciente_id:
+            try:
+                self.page.session.set("paciente_id", self.paciente_id)
+            except Exception:
+                pass
         self._tab_activo = 0
         self._mostrar_form = False
         self._tratamiento_activo = None
