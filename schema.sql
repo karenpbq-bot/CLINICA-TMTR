@@ -120,6 +120,15 @@ CREATE TABLE IF NOT EXISTS pagos (
     notas           TEXT
 );
 
+-- ── PACIENTE ↔ ESPECIALISTAS (N:M) ───────────────────────────
+CREATE TABLE IF NOT EXISTS paciente_especialistas (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    paciente_id     UUID REFERENCES pacientes(id) ON DELETE CASCADE,
+    especialista_id UUID REFERENCES especialistas(id) ON DELETE CASCADE,
+    creado_en       TIMESTAMPTZ DEFAULT now(),
+    UNIQUE(paciente_id, especialista_id)
+);
+
 -- ── ÍNDICES de rendimiento ────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_odontograma_paciente  ON odontograma(paciente_id);
 CREATE INDEX IF NOT EXISTS idx_constantes_paciente   ON constantes_vitales(paciente_id);

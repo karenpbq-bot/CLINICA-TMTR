@@ -17,6 +17,10 @@ from database import (
     guardar_diente,
     actualizar_diagnostico_dental,
     registrar_constante,
+    listar_especialistas,
+    listar_especialistas_de_paciente,
+    asignar_especialista_a_paciente,
+    desasignar_especialista_de_paciente,
 )
 
 # ── Constantes exportadas (usadas por otros módulos) ──────────────────────
@@ -446,6 +450,120 @@ class OdontogramaView(ft.Column):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  PANEL: ESPECIALISTAS ASIGNADOS AL PACIENTE
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _EspecialistasPanel(ft.Column):
+    """Panel interactivo para asignar / quitar especialistas a un paciente."""
+
+    def __init__(self, paciente_id: str, snack_fn):
+        super().__init__(spacing=6)
+        self.paciente_id = paciente_id
+        self._snack      = snack_fn
+        self._dd_esp     = ft.Dropdown(
+            label="Agregar especialista",
+            expand=True, dense=True,
+        )
+        self._recargar()
+
+    # ── recarga lista ─────────────────────────────────────────────────────
+
+    def _recargar(self):
+        try:
+            asignados = listar_especialistas_de_paciente(self.paciente_id)
+        except Exception:
+            asignados = []
+        try:
+            todos = listar_especialistas()
+        except Exception:
+            todos = []
+
+        asignados_ids = {a["especialista_id"] for a in asignados}
+        disponibles   = [e for e in todos if e["id"] not in asignados_ids]
+
+        self._dd_esp.options = [
+            ft.dropdown.Option(e["id"],
+                               f"{e.get('apellido','')} {e.get('nombre','')}"
+                               + (f" — {', '.join(e['especialidades']) if e.get('especialidades') else ''}"
+                                  if e.get("especialidades") else ""))
+            for e in disponibles
+        ]
+        self._dd_esp.value = None
+
+        chips = [self._chip(a) for a in asignados] if asignados else [
+            ft.Text("Sin especialistas asignados.", size=12, color="#9E9E9E", italic=True)
+        ]
+
+        self.controls = [
+            *chips,
+            ft.Row(controls=[
+                self._dd_esp,
+                ft.IconButton(
+                    ft.Icons.PERSON_ADD,
+                    icon_color=ft.Colors.BLUE_700,
+                    tooltip="Asignar especialista",
+                    on_click=self._agregar,
+                ),
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ]
+        if self.page:
+            self.update()
+
+    # ── chip de especialista asignado ─────────────────────────────────────
+
+    def _chip(self, asignado: dict) -> ft.Container:
+        esp    = asignado.get("especialistas") or {}
+        nombre = f"{esp.get('apellido', '')} {esp.get('nombre', '')}".strip() or "—"
+        esp_id = asignado["especialista_id"]
+        specs  = esp.get("especialidades") or []
+        sub    = ", ".join(specs) if specs else ""
+
+        return ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.PERSON_PIN, size=16, color="#1565C0"),
+                ft.Column(controls=[
+                    ft.Text(nombre, size=12, weight=ft.FontWeight.W_500, color="#1565C0"),
+                    ft.Text(sub, size=10, color="#607D8B") if sub else ft.Container(height=0),
+                ], spacing=1, tight=True),
+                ft.IconButton(
+                    ft.Icons.CLOSE,
+                    icon_size=14,
+                    icon_color="#9E9E9E",
+                    tooltip="Quitar especialista",
+                    on_click=lambda e, eid=esp_id: self._quitar(eid),
+                ),
+            ], spacing=6, tight=True,
+               vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor="#E3F2FD",
+            border=ft.border.all(1, "#90CAF9"),
+            border_radius=8,
+            padding=ft.Padding.symmetric(vertical=4, horizontal=10),
+        )
+
+    # ── acciones ──────────────────────────────────────────────────────────
+
+    def _agregar(self, e):
+        esp_id = self._dd_esp.value
+        if not esp_id:
+            self._snack("Seleccioná un especialista primero.", error=True)
+            return
+        try:
+            asignar_especialista_a_paciente(self.paciente_id, esp_id)
+            self._snack("Especialista asignado correctamente.")
+            self._recargar()
+        except Exception as ex:
+            self._snack(f"Error al asignar: {ex}", error=True)
+
+    def _quitar(self, esp_id: str):
+        try:
+            desasignar_especialista_de_paciente(self.paciente_id, esp_id)
+            self._snack("Especialista desasignado.")
+            self._recargar()
+        except Exception as ex:
+            self._snack(f"Error al desasignar: {ex}", error=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  PESTAÑA: FICHA DEL PACIENTE
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -499,10 +617,22 @@ class _FichaView(ft.Column):
             ft.Row(controls=[self.tf_obra, self.tf_afiliado], spacing=10),
             _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
             self.tf_alergias,
+            _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
+            (
+                _EspecialistasPanel(self.paciente_id, self.snack_fn)
+                if self.paciente_id else
+                ft.Container(
+                    content=ft.Text(
+                        "Guardá la ficha primero para asignar especialistas.",
+                        size=12, color="#9E9E9E", italic=True,
+                    ),
+                    padding=ft.Padding.symmetric(vertical=4, horizontal=2),
+                )
+            ),
             ft.Container(
                 content=ft.FilledButton(lbl_btn, icon=ft.Icons.SAVE,
                                         on_click=self._guardar),
-                padding=ft.padding.symmetric(vertical=10),
+                padding=ft.Padding.symmetric(vertical=10),
             ),
         ]
 

@@ -250,6 +250,41 @@ def actualizar_especialista(especialista_id: str, datos: dict):
     )
 
 
+# ── PACIENTE ↔ ESPECIALISTAS (N:M) ────────────────────────────────────────
+
+def listar_especialistas_de_paciente(paciente_id: str):
+    return (
+        get_client()
+        .table("paciente_especialistas")
+        .select("*, especialistas(id, nombre, apellido, especialidades)")
+        .eq("paciente_id", paciente_id)
+        .execute()
+        .data
+    )
+
+
+def asignar_especialista_a_paciente(paciente_id: str, especialista_id: str):
+    return (
+        get_client()
+        .table("paciente_especialistas")
+        .upsert({"paciente_id": paciente_id, "especialista_id": especialista_id})
+        .execute()
+        .data
+    )
+
+
+def desasignar_especialista_de_paciente(paciente_id: str, especialista_id: str):
+    return (
+        get_client()
+        .table("paciente_especialistas")
+        .delete()
+        .eq("paciente_id", paciente_id)
+        .eq("especialista_id", especialista_id)
+        .execute()
+        .data
+    )
+
+
 # ── DISPONIBILIDAD ────────────────────────────────────────────────────────
 
 def listar_disponibilidad(especialista_id: str):
