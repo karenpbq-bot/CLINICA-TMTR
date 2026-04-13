@@ -225,14 +225,15 @@ class OdontogramaView(ft.Column):
 
         self._panel_diag = ft.Container(
             content=ft.Column(controls=[
-                ft.Icon(ft.Icons.TOUCH_APP, size=28, color="#BDBDBD"),
-                ft.Text("Seleccioná herramienta y\nhacé clic en una superficie",
-                        color="#9E9E9E", italic=True, size=12,
+                ft.Icon(ft.Icons.TOUCH_APP, size=20, color="#BDBDBD"),
+                ft.Text("Clic en superficie\npara diagnosticar",
+                        color="#9E9E9E", italic=True, size=10,
                         text_align=ft.TextAlign.CENTER),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-               alignment=ft.MainAxisAlignment.CENTER),
-            expand=True, border=ft.border.all(1, "#E0E0E0"),
-            border_radius=6, padding=12,
+               alignment=ft.MainAxisAlignment.CENTER,
+               spacing=4),
+            width=190, border=ft.border.all(1, "#E0E0E0"),
+            border_radius=6, padding=8,
         )
         self._construir()
 
@@ -348,14 +349,16 @@ class OdontogramaView(ft.Column):
         ])
 
         self._panel_diag.content = ft.Column(controls=[
-            ft.Text(f"Pieza {numero}", size=14,
+            ft.Text(f"Pieza {numero}", size=12,
                     weight=ft.FontWeight.BOLD, color="#1565C0"),
             resumen,
-            ft.Divider(height=6),
+            ft.Divider(height=4),
             tf_diag,
             ft.FilledButton("Guardar diagnóstico",
-                            icon=ft.Icons.SAVE, on_click=guardar_diag),
-        ], spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
+                            icon=ft.Icons.SAVE, on_click=guardar_diag,
+                            height=32, style=ft.ButtonStyle(
+                                text_style=ft.TextStyle(size=11))),
+        ], spacing=5, scroll=ft.ScrollMode.AUTO, expand=True)
         if self._panel_diag.page:
             self._panel_diag.update()
 
