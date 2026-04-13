@@ -22,7 +22,8 @@ def _badge_rol(rol: str) -> ft.Container:
     color = COLORES_ROL.get(rol, "#757575")
     return ft.Container(
         content=ft.Text(rol, size=11, color="#FFFFFF", weight=ft.FontWeight.W_500),
-        bgcolor=color, border_radius=20, padding=ft.padding.symmetric(4, 10),
+        bgcolor=color, border_radius=20,
+        padding=ft.Padding.symmetric(vertical=4, horizontal=10),
     )
 
 
@@ -33,7 +34,8 @@ def _badge_estado(activo: bool) -> ft.Container:
             size=11, color="#FFFFFF", weight=ft.FontWeight.W_500,
         ),
         bgcolor="#2E7D32" if activo else "#9E9E9E",
-        border_radius=20, padding=ft.padding.symmetric(4, 10),
+        border_radius=20,
+        padding=ft.Padding.symmetric(vertical=4, horizontal=10),
     )
 
 
@@ -42,6 +44,12 @@ class UsuariosView(ft.Column):
         super().__init__(spacing=0, expand=True)
         self._lista = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
         self._construir_base()
+
+    # ── ciclo de vida ─────────────────────────────────────────────────────
+
+    def did_mount(self):
+        """Carga los datos una vez que el control ya está en la página."""
+        self._cargar_usuarios()
 
     # ── helpers ───────────────────────────────────────────────────────────
 
@@ -54,7 +62,7 @@ class UsuariosView(ft.Column):
             )
             self.page.update()
 
-    # ── construcción base ─────────────────────────────────────────────────
+    # ── construcción base (solo estructura, sin datos) ────────────────────
 
     def _construir_base(self):
         self.controls = [
@@ -73,16 +81,15 @@ class UsuariosView(ft.Column):
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
-                padding=ft.padding.symmetric(16, 20),
+                padding=ft.Padding.symmetric(vertical=16, horizontal=20),
             ),
             ft.Divider(height=1),
             ft.Container(
                 content=self._lista,
-                padding=ft.padding.all(16),
+                padding=ft.Padding.all(16),
                 expand=True,
             ),
         ]
-        self._cargar_usuarios()
 
     # ── carga de datos ────────────────────────────────────────────────────
 
@@ -207,6 +214,8 @@ class UsuariosView(ft.Column):
     # ── diálogo crear ─────────────────────────────────────────────────────
 
     def _abrir_form_crear(self):
+        if not self.page:
+            return
         tf_nombre   = ft.TextField(label="Nombre completo", autofocus=True)
         tf_usuario  = ft.TextField(label="Nombre de usuario *")
         tf_pass     = ft.TextField(label="Contraseña *", password=True, can_reveal_password=True)
@@ -226,17 +235,20 @@ class UsuariosView(ft.Column):
             if not usuario_str or not pass_str:
                 lbl_err.value   = "Usuario y contraseña son obligatorios."
                 lbl_err.visible = True
-                lbl_err.update()
+                if lbl_err.page:
+                    lbl_err.update()
                 return
             if pass_str != pass2_str:
                 lbl_err.value   = "Las contraseñas no coinciden."
                 lbl_err.visible = True
-                lbl_err.update()
+                if lbl_err.page:
+                    lbl_err.update()
                 return
             if len(pass_str) < 6:
                 lbl_err.value   = "La contraseña debe tener al menos 6 caracteres."
                 lbl_err.visible = True
-                lbl_err.update()
+                if lbl_err.page:
+                    lbl_err.update()
                 return
 
             try:
@@ -253,7 +265,8 @@ class UsuariosView(ft.Column):
             except Exception as ex:
                 lbl_err.value   = f"Error: {ex}"
                 lbl_err.visible = True
-                lbl_err.update()
+                if lbl_err.page:
+                    lbl_err.update()
 
         dlg = ft.AlertDialog(
             modal=True,
@@ -273,18 +286,19 @@ class UsuariosView(ft.Column):
             ),
             actions=[
                 ft.TextButton("Cancelar",
-                              on_click=lambda e: self.page.pop_dialog()),
+                              on_click=lambda e: self.page.pop_dialog() if self.page else None),
                 ft.FilledButton("Crear Usuario",
                                 icon=ft.Icons.PERSON_ADD,
                                 on_click=guardar),
             ],
         )
-        if self.page:
-            self.page.show_dialog(dlg)
+        self.page.show_dialog(dlg)
 
     # ── diálogo editar ────────────────────────────────────────────────────
 
     def _abrir_form_editar(self, u: dict):
+        if not self.page:
+            return
         uid = u["id"]
         tf_nombre = ft.TextField(
             label="Nombre completo",
@@ -316,7 +330,8 @@ class UsuariosView(ft.Column):
             except Exception as ex:
                 lbl_err.value   = f"Error: {ex}"
                 lbl_err.visible = True
-                lbl_err.update()
+                if lbl_err.page:
+                    lbl_err.update()
 
         dlg = ft.AlertDialog(
             modal=True,
@@ -330,16 +345,17 @@ class UsuariosView(ft.Column):
             ),
             actions=[
                 ft.TextButton("Cancelar",
-                              on_click=lambda e: self.page.pop_dialog()),
+                              on_click=lambda e: self.page.pop_dialog() if self.page else None),
                 ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=guardar),
             ],
         )
-        if self.page:
-            self.page.show_dialog(dlg)
+        self.page.show_dialog(dlg)
 
     # ── diálogo cambiar contraseña ────────────────────────────────────────
 
     def _abrir_cambio_pass(self, uid: str):
+        if not self.page:
+            return
         tf_pass  = ft.TextField(label="Nueva contraseña *",
                                 password=True, can_reveal_password=True, autofocus=True)
         tf_pass2 = ft.TextField(label="Repetir contraseña *",
@@ -351,13 +367,19 @@ class UsuariosView(ft.Column):
             p2 = (tf_pass2.value or "").strip()
             if not p1:
                 lbl_err.value = "Ingresá la nueva contraseña."
-                lbl_err.visible = True; lbl_err.update(); return
+                lbl_err.visible = True
+                if lbl_err.page: lbl_err.update()
+                return
             if p1 != p2:
                 lbl_err.value = "Las contraseñas no coinciden."
-                lbl_err.visible = True; lbl_err.update(); return
+                lbl_err.visible = True
+                if lbl_err.page: lbl_err.update()
+                return
             if len(p1) < 6:
                 lbl_err.value = "Mínimo 6 caracteres."
-                lbl_err.visible = True; lbl_err.update(); return
+                lbl_err.visible = True
+                if lbl_err.page: lbl_err.update()
+                return
             try:
                 cambiar_password_usuario(uid, p1)
                 if self.page:
@@ -365,7 +387,8 @@ class UsuariosView(ft.Column):
                 self._snack("Contraseña actualizada correctamente.")
             except Exception as ex:
                 lbl_err.value = f"Error: {ex}"
-                lbl_err.visible = True; lbl_err.update()
+                lbl_err.visible = True
+                if lbl_err.page: lbl_err.update()
 
         dlg = ft.AlertDialog(
             modal=True,
@@ -379,17 +402,18 @@ class UsuariosView(ft.Column):
             ),
             actions=[
                 ft.TextButton("Cancelar",
-                              on_click=lambda e: self.page.pop_dialog()),
+                              on_click=lambda e: self.page.pop_dialog() if self.page else None),
                 ft.FilledButton("Actualizar", icon=ft.Icons.LOCK_RESET,
                                 on_click=guardar),
             ],
         )
-        if self.page:
-            self.page.show_dialog(dlg)
+        self.page.show_dialog(dlg)
 
     # ── confirmar activar / desactivar ────────────────────────────────────
 
     def _confirmar_toggle(self, u: dict):
+        if not self.page:
+            return
         activo  = u.get("activo", True)
         uid     = u["id"]
         nombre  = u.get("nombre") or u.get("usuario", "")
@@ -406,7 +430,7 @@ class UsuariosView(ft.Column):
             ),
             actions=[
                 ft.TextButton("Cancelar",
-                              on_click=lambda e: self.page.pop_dialog()),
+                              on_click=lambda e: self.page.pop_dialog() if self.page else None),
                 ft.FilledButton(
                     "Desactivar" if activo else "Activar",
                     style=ft.ButtonStyle(
@@ -416,8 +440,7 @@ class UsuariosView(ft.Column):
                 ),
             ],
         )
-        if self.page:
-            self.page.show_dialog(dlg)
+        self.page.show_dialog(dlg)
 
     def _toggle_usuario(self, uid: str, nuevo_estado: bool):
         if self.page:
