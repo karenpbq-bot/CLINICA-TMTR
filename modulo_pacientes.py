@@ -514,7 +514,7 @@ class PacientesView(ft.Row):
             idx_capturado = i
             barra_tabs.controls.append(
                 ft.ElevatedButton(
-                    text=nombre,
+                    nombre,
                     icon=icono,
                     on_click=lambda e, n=idx_capturado: _seleccionar_tab(n),
                     style=ft.ButtonStyle(
