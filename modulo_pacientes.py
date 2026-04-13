@@ -1102,15 +1102,20 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
+        # El contenido inicial es el formulario de nuevo paciente.
+        # Lo asignamos directamente sin llamar update() porque todavía
+        # no estamos en la página (Flet 0.84 lanza RuntimeError si se
+        # accede a control.page antes de montarlo).
+        self._area.content = _FichaView(
+            None, self._snack, on_creado=self._on_paciente_creado
+        )
+
         self.controls = [
             barra_main,
             self._barra_selector,
             self._barra_hist,
             self._area,
         ]
-
-        # Arrancar mostrando el formulario de nuevo paciente
-        self._mostrar_nuevo_paciente()
 
     # ── navegación pestañas principales ──────────────────────────────────
 
