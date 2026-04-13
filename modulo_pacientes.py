@@ -1029,8 +1029,8 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
-        # ── área de contenido principal ─────────────────────────────────
-        self._area = ft.Container(expand=True, padding=ft.Padding.all(16))
+        # Índice donde se coloca el contenido activo en self.controls
+        self._IDX_CONTENIDO = 3
 
         self._construir()
 
@@ -1103,19 +1103,18 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
         )
 
-        # El contenido inicial es el formulario de nuevo paciente.
-        # Lo asignamos directamente sin llamar update() porque todavía
-        # no estamos en la página (Flet 0.84 lanza RuntimeError si se
-        # accede a control.page antes de montarlo).
-        self._area.content = _FichaView(
+        # Contenido inicial: formulario nuevo paciente puesto directamente
+        # en controls[3] — sin Container intermedio para evitar conflictos
+        # de layout expand en Flet 0.84.
+        ficha_inicial = _FichaView(
             None, self._snack, on_creado=self._on_paciente_creado
         )
 
         self.controls = [
-            barra_main,
-            self._barra_selector,
-            self._barra_hist,
-            self._area,
+            barra_main,             # índice 0
+            self._barra_selector,   # índice 1
+            self._barra_hist,       # índice 2
+            ficha_inicial,          # índice 3 — contenido activo
         ]
 
     # ── navegación pestañas principales ──────────────────────────────────
@@ -1147,6 +1146,12 @@ class PacientesView(ft.Column):
 
     # ── pestaña "Nuevo Paciente" ──────────────────────────────────────────
 
+    def _set_contenido(self, nuevo):
+        """Reemplaza controls[3] con el nuevo contenido y actualiza."""
+        self.controls[self._IDX_CONTENIDO] = nuevo
+        if self.page:
+            self.update()
+
     def _mostrar_nuevo_paciente(self):
         self._barra_selector.visible = False
         self._barra_hist.visible     = False
@@ -1155,9 +1160,7 @@ class PacientesView(ft.Column):
         if self._barra_hist.page:
             self._barra_hist.update()
         ficha = _FichaView(None, self._snack, on_creado=self._on_paciente_creado)
-        self._area.content = ficha
-        if self._area.page:
-            self._area.update()
+        self._set_contenido(ficha)
 
     # ── pestaña "Historia Clínica" ────────────────────────────────────────
 
@@ -1174,14 +1177,13 @@ class PacientesView(ft.Column):
             self._barra_hist.visible = False
             if self._barra_hist.page:
                 self._barra_hist.update()
-            self._area.content = ft.Column(controls=[
+            placeholder = ft.Column(controls=[
                 ft.Icon(ft.Icons.PERSON_SEARCH, size=52, color="#BDBDBD"),
                 ft.Text("Seleccioná un paciente para ver su historia clínica",
                         color="#9E9E9E", size=14, italic=True),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                alignment=ft.MainAxisAlignment.CENTER, expand=True)
-            if self._area.page:
-                self._area.update()
+            self._set_contenido(placeholder)
 
     def _on_selector(self, e):
         pid = self.dd_selector.value
@@ -1240,9 +1242,7 @@ class PacientesView(ft.Column):
                 dd = {}
             contenido = OdontogramaView(pid, dd, snack)
 
-        self._area.content = contenido
-        if self._area.page:
-            self._area.update()
+        self._set_contenido(contenido)
 
     # ── callback post-creación ────────────────────────────────────────────
 
