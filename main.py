@@ -150,11 +150,14 @@ def _login_view(page: ft.Page) -> ft.View:
             ft.Container(
                 content=ft.Column(
                     controls=[
-                        ft.Icon(ft.Icons.LOCAL_HOSPITAL, size=72, color=ft.Colors.BLUE_700),
-                        ft.Text("Consultorio Odontológico", size=26,
-                                weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900),
-                        ft.Text("Sistema de Gestión", size=14, color=ft.Colors.GREY_600),
-                        ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                        ft.Container(
+                            content=ft.Image(
+                                src="logo_orthoclinic.jpg",
+                                width=300,
+                                fit=ft.BoxFit.CONTAIN,
+                            ),
+                            margin=ft.Margin(0, 0, 0, 20),
+                        ),
                         tf_usuario,
                         tf_password,
                         lbl_error,
@@ -229,4 +232,4 @@ def _app_shell(route: str, page: ft.Page) -> ft.View:
     )
 
 
-ft.run(main, port=PORT, view=ft.AppView.WEB_BROWSER)
+ft.run(main, port=PORT, view=ft.AppView.WEB_BROWSER, assets_dir="assets")
