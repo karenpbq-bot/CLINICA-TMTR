@@ -8,7 +8,7 @@ from database import (
     listar_tratamientos, crear_tratamiento, actualizar_tratamiento,
     eliminar_tratamiento, listar_pacientes, listar_especialistas,
 )
-from modulo_historia_clinica import HistoriaClinicaView
+from modulo_pacientes import HistoriaClinicaView
 
 CARAS_DIENTE = ["Oclusal", "Vestibular", "Lingual/Palatino", "Mesial", "Distal"]
 ESTADOS_TRATAMIENTO = {

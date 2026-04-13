@@ -1,18 +1,21 @@
 """
-Módulo de Pacientes: Ficha Clínica completa + Odontograma Interactivo.
-Flet >= 0.21: hereda de controles concretos en lugar de UserControl.
+Módulo de Pacientes — Historia Clínica Odontológica completa.
+Incluye: selector de paciente, información general, anamnesis,
+signos vitales, antecedentes, odontograma diagnóstico y observaciones.
 """
 
+import datetime
 import flet as ft
 from database import (
     listar_pacientes,
-    crear_paciente,
-    actualizar_paciente,
+    obtener_historia_clinica,
+    guardar_historia_clinica,
     obtener_odontograma,
     guardar_diente,
-    listar_constantes,
-    registrar_constante,
+    actualizar_diagnostico_dental,
 )
+
+# ── Constantes del odontograma ─────────────────────────────────────────────
 
 ESTADOS_DIENTE = {
     "sano":       {"color": "#FFFFFF", "borde": "#BDBDBD", "label": "Sano"},
@@ -29,39 +32,162 @@ DIENTES_ADULTO = [
     [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28],
     [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38],
 ]
-ANTECEDENTES_CAMPOS = [
-    ("diabetes",     "Diabetes"),
-    ("hipertension", "Hipertensión"),
-    ("cardiopatias", "Cardiopatías"),
-    ("coagulopatias","Coagulopatías"),
-    ("embarazo",     "Embarazo"),
-    ("medicacion",   "Medicación habitual"),
-    ("asma",         "Asma"),
-    ("epilepsia",    "Epilepsia"),
+
+# ── Constantes del formulario ──────────────────────────────────────────────
+
+ANTECEDENTES = [
+    ("tratamiento_medico",       "1. Tratamiento médico actual"),
+    ("medicamentos",             "2. Toma de medicamentos"),
+    ("alergias",                 "3. Alergias"),
+    ("cardiopatias",             "4. Cardiopatías"),
+    ("presion_arterial",         "5. Alteración presión arterial"),
+    ("embarazo",                 "6. Embarazo"),
+    ("diabetes",                 "7. Diabetes"),
+    ("hepatitis",                "8. Hepatitis"),
+    ("irradiaciones",            "9. Irradiaciones"),
+    ("discrasias",               "10. Discrasias sanguíneas"),
+    ("fiebre_reumatica",         "11. Fiebre reumática"),
+    ("enf_renales",              "12. Enfermedades renales"),
+    ("inmunosupresion",          "13. Inmunosupresión"),
+    ("trastornos_emocionales",   "14. Trastornos emocionales"),
+    ("trastornos_respiratorios", "15. Trastornos respiratorios"),
+    ("trastornos_gastricos",     "16. Trastornos gástricos"),
+    ("epilepsia",                "17. Epilepsia"),
+    ("cirugias",                 "18. Cirugías (incluye orales)"),
+    ("enf_orales",               "19. Enfermedades orales"),
+    ("otras_alteraciones",       "20. Otras alteraciones"),
+    ("fuma_licor",               "21. Fuma o consume licor"),
 ]
 
+VIH_OPTIONS = ["Negativo", "Positivo", "No informado"]
 
-# ── Odontograma ───────────────────────────────────────────────────────────
 
-class DienteWidget(ft.Column):
-    def __init__(self, numero: int, caras_estado: dict, on_change):
-        super().__init__(spacing=1, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-        self.numero = numero
-        self.caras_estado = {c: caras_estado.get(c, "sano") for c in CARAS}
-        self.on_change = on_change
+def _posicion_diente(numero: int) -> str:
+    if 11 <= numero <= 18:
+        return "Superior Derecho"
+    if 21 <= numero <= 28:
+        return "Superior Izquierdo"
+    if 31 <= numero <= 38:
+        return "Inferior Izquierdo"
+    if 41 <= numero <= 48:
+        return "Inferior Derecho"
+    return ""
+
+
+def _seccion(titulo: str, icono: str) -> ft.Container:
+    return ft.Container(
+        content=ft.Row(controls=[
+            ft.Icon(icono, size=18, color="#FFFFFF"),
+            ft.Text(titulo, size=13, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
+        ], spacing=8),
+        bgcolor="#1565C0", border_radius=6,
+        padding=ft.padding.symmetric(horizontal=14, vertical=8),
+        margin=ft.margin.only(top=10, bottom=4),
+    )
+
+
+# ── Widget de diente para la cuadrícula ───────────────────────────────────
+
+class _DienteDiag(ft.Column):
+    def __init__(self, numero: int, caras_estado: dict,
+                 tiene_diagnostico: bool, on_select):
+        super().__init__(
+            spacing=1,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        self.numero            = numero
+        self.caras_estado      = {c: caras_estado.get(c, "sano") for c in CARAS}
+        self.tiene_diagnostico = tiene_diagnostico
+        self.on_select         = on_select
         self._contenedores: dict[str, ft.Container] = {}
+        self._lbl = ft.Text(str(numero), size=7,
+                            text_align=ft.TextAlign.CENTER, color="#616161")
+        self._ind = ft.Container(
+            width=10, height=3, border_radius=1,
+            bgcolor="#1565C0" if tiene_diagnostico else "transparent",
+        )
         self._construir()
 
-    def _hacer_cara(self, cara: str) -> ft.Container:
+    def _celda(self, cara: str) -> ft.Container:
         estado = self.caras_estado[cara]
-        cfg = ESTADOS_DIENTE[estado]
+        cfg    = ESTADOS_DIENTE[estado]
         c = ft.Container(
-            width=14, height=14,
+            width=11, height=11,
             bgcolor=cfg["color"],
             border=ft.border.all(1, cfg["borde"]),
-            border_radius=2,
-            tooltip=f"{cara.capitalize()} – {cfg['label']}",
+            border_radius=1,
+            tooltip=f"{cara.capitalize()}: {cfg['label']}",
+            on_click=lambda e: self.on_select(self.numero),
+        )
+        self._contenedores[cara] = c
+        return c
+
+    def actualizar(self, caras_estado: dict, tiene_diagnostico: bool):
+        self.caras_estado      = {c: caras_estado.get(c, "sano") for c in CARAS}
+        self.tiene_diagnostico = tiene_diagnostico
+        for cara, cont in self._contenedores.items():
+            cfg = ESTADOS_DIENTE[self.caras_estado[cara]]
+            cont.bgcolor = cfg["color"]
+            cont.border  = ft.border.all(1, cfg["borde"])
+            cont.tooltip = f"{cara.capitalize()}: {cfg['label']}"
+            if cont.page:
+                cont.update()
+        self._ind.bgcolor = "#1565C0" if tiene_diagnostico else "transparent"
+        if self._ind.page:
+            self._ind.update()
+
+    def _construir(self):
+        self.controls = [
+            self._celda("vestibular"),
+            ft.Row(controls=[
+                self._celda("mesial"),
+                self._celda("oclusal"),
+                self._celda("distal"),
+            ], spacing=1),
+            self._celda("lingual"),
+            self._lbl,
+            self._ind,
+        ]
+
+
+# ── Panel de detalle para una pieza ──────────────────────────────────────
+
+class _DetalleDiente(ft.Column):
+    def __init__(self, numero: int, caras_estado: dict,
+                 diagnostico: str, on_guardar):
+        super().__init__(spacing=10, expand=True, scroll=ft.ScrollMode.AUTO)
+        self.numero       = numero
+        self.caras_estado = {c: caras_estado.get(c, "sano") for c in CARAS}
+        self.on_guardar   = on_guardar
+        self._contenedores: dict[str, ft.Container] = {}
+
+        self.tf_diagnostico = ft.TextField(
+            label="Diagnóstico / Zona a intervenir",
+            value=diagnostico,
+            multiline=True,
+            min_lines=3,
+            expand=True,
+        )
+        self._estado_resumen = ft.Column(spacing=4)
+        self._construir()
+
+    def _celda_grande(self, cara: str) -> ft.Container:
+        estado = self.caras_estado[cara]
+        cfg    = ESTADOS_DIENTE[estado]
+        c = ft.Container(
+            width=38, height=38,
+            bgcolor=cfg["color"],
+            border=ft.border.all(2, cfg["borde"]),
+            border_radius=5,
+            tooltip=f"Clic para cambiar — {cara.capitalize()}: {cfg['label']}",
             on_click=lambda e, ca=cara: self._ciclar(ca),
+            content=ft.Text(
+                cara[:3].upper(), size=7.5,
+                text_align=ft.TextAlign.CENTER,
+                weight=ft.FontWeight.W_600,
+                color="#1A1A1A",
+            ),
+            alignment=ft.Alignment(0, 0),
         )
         self._contenedores[cara] = c
         return c
@@ -71,471 +197,497 @@ class DienteWidget(ft.Column):
         sig = estados[(estados.index(self.caras_estado[cara]) + 1) % len(estados)]
         self.caras_estado[cara] = sig
         cfg = ESTADOS_DIENTE[sig]
-        c = self._contenedores[cara]
+        c   = self._contenedores[cara]
         c.bgcolor = cfg["color"]
-        c.border = ft.border.all(1, cfg["borde"])
-        c.tooltip = f"{cara.capitalize()} – {cfg['label']}"
-        c.update()
-        self.on_change(self.numero, dict(self.caras_estado))
+        c.border  = ft.border.all(2, cfg["borde"])
+        c.tooltip = f"Clic para cambiar — {cara.capitalize()}: {cfg['label']}"
+        if c.page:
+            c.update()
+        self._refrescar_resumen()
+
+    def _refrescar_resumen(self):
+        self._estado_resumen.controls = [
+            ft.Container(
+                content=ft.Row(controls=[
+                    ft.Container(
+                        width=10, height=10,
+                        bgcolor=ESTADOS_DIENTE[st]["color"],
+                        border=ft.border.all(1, ESTADOS_DIENTE[st]["borde"]),
+                        border_radius=2,
+                    ),
+                    ft.Text(f"{cara.capitalize()}: {ESTADOS_DIENTE[st]['label']}", size=11),
+                ], spacing=5),
+                padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                border=ft.border.all(1, "#E0E0E0"),
+                border_radius=4,
+            )
+            for cara, st in self.caras_estado.items()
+        ]
+        if self._estado_resumen.page:
+            self._estado_resumen.update()
+
+    def _guardar(self, e):
+        self.on_guardar(
+            self.numero,
+            dict(self.caras_estado),
+            self.tf_diagnostico.value.strip(),
+        )
 
     def _construir(self):
-        self.controls = [
-            self._hacer_cara("vestibular"),
+        self._refrescar_resumen()
+        superficie = ft.Column(controls=[
+            ft.Row(controls=[self._celda_grande("vestibular")],
+                   alignment=ft.MainAxisAlignment.CENTER),
             ft.Row(controls=[
-                self._hacer_cara("mesial"),
-                self._hacer_cara("oclusal"),
-                self._hacer_cara("distal"),
-            ], spacing=1),
-            self._hacer_cara("lingual"),
-            ft.Text(str(self.numero), size=8,
-                    text_align=ft.TextAlign.CENTER, color="#616161"),
+                self._celda_grande("mesial"),
+                self._celda_grande("oclusal"),
+                self._celda_grande("distal"),
+            ], spacing=6, alignment=ft.MainAxisAlignment.CENTER),
+            ft.Row(controls=[self._celda_grande("lingual")],
+                   alignment=ft.MainAxisAlignment.CENTER),
+        ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        self.controls = [
+            ft.Container(
+                content=ft.Row(controls=[
+                    ft.Icon(ft.Icons.MEDICAL_SERVICES, color="#1565C0", size=22),
+                    ft.Column(controls=[
+                        ft.Text(f"Pieza {self.numero}",
+                                size=16, weight=ft.FontWeight.BOLD),
+                        ft.Text(_posicion_diente(self.numero),
+                                size=11, color="#757575"),
+                    ], spacing=2),
+                ], spacing=10),
+                bgcolor="#E3F2FD", border_radius=6,
+                padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            ),
+            ft.Divider(height=4),
+            ft.Text("Superficies — clic para cambiar estado:",
+                    size=12, weight=ft.FontWeight.W_500),
+            ft.Container(
+                content=superficie,
+                border=ft.border.all(1, "#BBDEFB"),
+                border_radius=6, padding=12, bgcolor="#FAFAFA",
+            ),
+            ft.Text("Estado por superficie:", size=11, color="#616161"),
+            self._estado_resumen,
+            ft.Divider(height=4),
+            self.tf_diagnostico,
+            ft.FilledButton("Guardar pieza", icon=ft.Icons.SAVE,
+                            on_click=self._guardar),
         ]
 
 
-class OdontogramaView(ft.Column):
-    def __init__(self, paciente_id: str, snack_fn=None):
-        super().__init__(spacing=8, scroll=ft.ScrollMode.AUTO)
-        self.paciente_id = paciente_id
-        self.datos: dict[int, dict] = {}
-        self.snack_fn = snack_fn
-        self._fila_sup = ft.Row(spacing=6, wrap=True)
-        self._fila_inf = ft.Row(spacing=6, wrap=True)
-        self.controls = self._estructura()
+# ── Odontograma con diagnóstico ───────────────────────────────────────────
+
+class OdontogramaDiagnosticoView(ft.Column):
+    def __init__(self, paciente_id: str,
+                 diagnostico_dental: dict | None = None,
+                 snack_fn=None):
+        super().__init__(spacing=6, expand=True)
+        self.paciente_id  = paciente_id
+        self.diagnosticos = dict(diagnostico_dental or {})
+        self.snack_fn     = snack_fn
+
+        self._datos_odonto: dict[int, dict]    = {}
+        self._diente_sel: int | None           = None
+        self._widgets: dict[int, _DienteDiag] = {}
+
+        self._fila_sup = ft.Row(spacing=3, wrap=False)
+        self._fila_inf = ft.Row(spacing=3, wrap=False)
+        self._panel    = ft.Container(
+            expand=True,
+            border=ft.border.all(1, "#E0E0E0"),
+            border_radius=6, padding=12,
+            content=ft.Column(controls=[
+                ft.Icon(ft.Icons.TOUCH_APP, size=32, color="#BDBDBD"),
+                ft.Text("Seleccioná una pieza dental",
+                        color="#9E9E9E", italic=True, size=13),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+               alignment=ft.MainAxisAlignment.CENTER,
+               expand=True),
+        )
+        self._construir_layout()
 
     def did_mount(self):
         try:
             filas = obtener_odontograma(self.paciente_id)
-            self.datos = {r["diente"]: r["caras"] for r in filas}
-        except Exception as ex:
-            if self.snack_fn:
-                self.snack_fn(f"Error cargando odontograma: {ex}", error=True)
+            self._datos_odonto = {r["diente"]: r.get("caras", {}) for r in filas}
+        except Exception:
+            self._datos_odonto = {}
         self._poblar_filas()
         self.update()
 
-    def _on_diente(self, numero: int, caras: dict):
+    def _poblar_filas(self):
+        def build(nums):
+            widgets = []
+            for n in nums:
+                caras = self._datos_odonto.get(n, {c: "sano" for c in CARAS})
+                tiene = bool(self.diagnosticos.get(str(n), "").strip())
+                w = _DienteDiag(n, caras, tiene, self._on_seleccionar)
+                self._widgets[n] = w
+                widgets.append(w)
+            return widgets
+        self._fila_sup.controls = build(DIENTES_ADULTO[0])
+        self._fila_inf.controls = build(DIENTES_ADULTO[1])
+
+    def _on_seleccionar(self, numero: int):
+        self._diente_sel = numero
+        self._actualizar_panel()
+
+    def _actualizar_panel(self):
+        n = self._diente_sel
+        if n is None:
+            return
+        caras = self._datos_odonto.get(n, {c: "sano" for c in CARAS})
+        diag  = self.diagnosticos.get(str(n), "")
+        self._panel.content = _DetalleDiente(
+            numero=n, caras_estado=caras,
+            diagnostico=diag, on_guardar=self._guardar_pieza,
+        )
+        if self._panel.page:
+            self._panel.update()
+
+    def _guardar_pieza(self, numero: int, caras: dict, diagnostico: str):
         try:
             guardar_diente(self.paciente_id, numero, caras)
-            self.datos[numero] = caras
+            self._datos_odonto[numero] = caras
         except Exception as ex:
             if self.snack_fn:
-                self.snack_fn(f"Error al guardar diente {numero}: {ex}", error=True)
-
-    def _poblar_filas(self):
-        def fila(nums):
-            return [
-                DienteWidget(n,
-                             self.datos.get(n, {c: "sano" for c in CARAS}),
-                             self._on_diente)
-                for n in nums
-            ]
-        self._fila_sup.controls = fila(DIENTES_ADULTO[0])
-        self._fila_inf.controls = fila(DIENTES_ADULTO[1])
-
-    def _leyenda(self):
-        return ft.Row(
-            controls=[
-                ft.Row(controls=[
-                    ft.Container(width=12, height=12, bgcolor=v["color"],
-                                 border=ft.border.all(1, v["borde"]), border_radius=2),
-                    ft.Text(v["label"], size=10),
-                ], spacing=4)
-                for v in ESTADOS_DIENTE.values()
-            ],
-            wrap=True, spacing=14,
-        )
-
-    def _estructura(self):
-        return [
-            ft.Text("Odontograma", size=16, weight=ft.FontWeight.BOLD),
-            ft.Text("Superior (derecho → izquierdo)", size=11, color="#616161"),
-            self._fila_sup,
-            ft.Divider(height=8),
-            ft.Text("Inferior (izquierdo → derecho)", size=11, color="#616161"),
-            self._fila_inf,
-            ft.Divider(height=8),
-            ft.Text("Leyenda — clic en cada cara para cambiar estado:", size=11, color="#757575"),
-            self._leyenda(),
-        ]
-
-
-# ── Constantes Vitales ────────────────────────────────────────────────────
-
-class ConstantesView(ft.Column):
-    def __init__(self, paciente_id: str, snack_fn=None):
-        super().__init__(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
-        self.paciente_id = paciente_id
-        self.snack_fn = snack_fn
-        self.historial: list[dict] = []
-
-        self.tf_psys   = ft.TextField(label="Presión Sistólica (mmHg)",
-                                      keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-        self.tf_pdia   = ft.TextField(label="Presión Diastólica (mmHg)",
-                                      keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-        self.tf_pulso  = ft.TextField(label="Pulso (lpm)",
-                                      keyboard_type=ft.KeyboardType.NUMBER, expand=True)
-        self.tf_peso   = ft.TextField(label="Peso (kg)",
-                                      keyboard_type=ft.KeyboardType.NUMBER,
-                                      on_change=self._calcular_imc, expand=True)
-        self.tf_altura = ft.TextField(label="Altura (cm)",
-                                      keyboard_type=ft.KeyboardType.NUMBER,
-                                      on_change=self._calcular_imc, expand=True)
-        self.tf_imc    = ft.TextField(label="IMC (calculado)", read_only=True,
-                                      bgcolor="#F5F5F5", expand=True)
-        self._tabla = ft.Column(spacing=4)
-        self._construir()
-
-    def did_mount(self):
-        self.historial = listar_constantes(self.paciente_id)
-        self._actualizar_tabla()
-        self.update()
-
-    def _calcular_imc(self, e=None):
-        try:
-            peso = float(self.tf_peso.value or 0)
-            alt  = float(self.tf_altura.value or 0)
-            if peso > 0 and alt > 0:
-                self.tf_imc.value = f"{peso / ((alt / 100) ** 2):.1f}"
-                self.tf_imc.update()
-        except ValueError:
-            pass
-
-    def _guardar(self, e):
-        try:
-            datos = {
-                "paciente_id": self.paciente_id,
-                "presion_sys": int(self.tf_psys.value or 0) or None,
-                "presion_dia": int(self.tf_pdia.value or 0) or None,
-                "pulso":       int(self.tf_pulso.value or 0) or None,
-                "peso_kg":     float(self.tf_peso.value or 0) or None,
-                "altura_cm":   float(self.tf_altura.value or 0) or None,
-                "imc":         float(self.tf_imc.value or 0) or None,
-            }
-            registrar_constante(datos)
-            self.historial = listar_constantes(self.paciente_id)
-            for tf in [self.tf_psys, self.tf_pdia, self.tf_pulso,
-                       self.tf_peso, self.tf_altura, self.tf_imc]:
-                tf.value = ""
-            self._actualizar_tabla()
-            self.update()
-            if self.snack_fn:
-                self.snack_fn("Constantes registradas correctamente.")
-        except Exception as ex:
-            if self.snack_fn:
-                self.snack_fn(f"Error: {ex}", error=True)
-
-    def _actualizar_tabla(self):
-        if not self.historial:
-            self._tabla.controls = [ft.Text("Sin registros previos.", color="#9E9E9E", size=12)]
+                self.snack_fn(f"Error guardando superficies: {ex}", error=True)
             return
-        filas = []
-        for h in self.historial[:5]:
-            pa = f"{h.get('presion_sys','–')}/{h.get('presion_dia','–')}"
-            filas.append(ft.DataRow(cells=[
-                ft.DataCell(ft.Text(str(h.get("fecha", ""))[:10], size=11)),
-                ft.DataCell(ft.Text(pa, size=11)),
-                ft.DataCell(ft.Text(str(h.get("pulso", "–")), size=11)),
-                ft.DataCell(ft.Text(str(h.get("peso_kg", "–")), size=11)),
-                ft.DataCell(ft.Text(str(h.get("imc", "–")), size=11)),
-            ]))
-        self._tabla.controls = [
-            ft.DataTable(
-                columns=[
-                    ft.DataColumn(ft.Text("Fecha", size=11)),
-                    ft.DataColumn(ft.Text("PA (mmHg)", size=11)),
-                    ft.DataColumn(ft.Text("Pulso", size=11)),
-                    ft.DataColumn(ft.Text("Peso kg", size=11)),
-                    ft.DataColumn(ft.Text("IMC", size=11)),
-                ],
-                rows=filas,
-                column_spacing=16,
-            )
-        ]
-
-    def _construir(self):
-        self.controls = [
-            ft.Text("Nuevo Registro de Constantes Vitales",
-                    size=14, weight=ft.FontWeight.BOLD),
-            ft.Row(controls=[self.tf_psys, self.tf_pdia, self.tf_pulso], spacing=8),
-            ft.Row(controls=[self.tf_peso, self.tf_altura, self.tf_imc], spacing=8),
-            ft.FilledButton("Registrar", icon=ft.Icons.MONITOR_HEART,
-                              on_click=self._guardar),
-            ft.Divider(),
-            ft.Text("Últimos 5 registros", size=13, weight=ft.FontWeight.W_500),
-            self._tabla,
-        ]
-
-
-# ── Ficha Clínica ─────────────────────────────────────────────────────────
-
-class FichaClinicaView(ft.Column):
-    def __init__(self, paciente: dict, on_guardado=None, snack_fn=None):
-        super().__init__(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
-        self.paciente = paciente
-        self.on_guardado = on_guardado
-        self.snack_fn = snack_fn
-        self._checks: dict[str, ft.Checkbox] = {}
-        self._construir()
-
-    def _guardar(self, e):
-        if not self.tf_nombre.value.strip() or not self.tf_apellido.value.strip():
-            if self.snack_fn:
-                self.snack_fn("Nombre y Apellido son obligatorios.", error=True)
-            return
-        antecedentes = {k: cb.value for k, cb in self._checks.items()}
-        datos = {
-            "nombre":       self.tf_nombre.value.strip(),
-            "apellido":     self.tf_apellido.value.strip(),
-            "fecha_nac":    self.tf_fecha_nac.value.strip() or None,
-            "dni":          self.tf_dni.value.strip() or None,
-            "telefono":     self.tf_telefono.value.strip() or None,
-            "email":        self.tf_email.value.strip() or None,
-            "direccion":    self.tf_direccion.value.strip() or None,
-            "obra_social":  self.tf_obra_social.value.strip() or None,
-            "nro_afiliado": self.tf_nro_afiliado.value.strip() or None,
-            "grupo_sangre": self.dd_grupo.value or None,
-            "alergias":     self.tf_alergias.value.strip() or None,
-            "antecedentes": antecedentes,
-        }
+        self.diagnosticos[str(numero)] = diagnostico
         try:
-            if self.paciente.get("id"):
-                actualizar_paciente(self.paciente["id"], datos)
-                self.paciente.update(datos)
-                if self.snack_fn:
-                    self.snack_fn("Ficha actualizada correctamente.")
-            else:
-                resultado = crear_paciente(datos)
-                self.paciente = resultado[0] if isinstance(resultado, list) else resultado
-                if self.snack_fn:
-                    self.snack_fn("Paciente creado correctamente.")
-            if self.on_guardado:
-                self.on_guardado(self.paciente)
+            actualizar_diagnostico_dental(self.paciente_id, self.diagnosticos)
         except Exception as ex:
             if self.snack_fn:
-                self.snack_fn(f"Error al guardar: {ex}", error=True)
+                self.snack_fn(f"Error guardando diagnóstico: {ex}", error=True)
+            return
+        if numero in self._widgets:
+            self._widgets[numero].actualizar(caras, bool(diagnostico.strip()))
+        if self.snack_fn:
+            self.snack_fn(f"Pieza {numero} guardada correctamente.")
 
-    def _construir(self):
-        p   = self.paciente
-        ant = p.get("antecedentes") or {}
+    def _leyenda(self) -> ft.Row:
+        return ft.Row(controls=[
+            ft.Row(controls=[
+                ft.Container(width=11, height=11, bgcolor=v["color"],
+                             border=ft.border.all(1, v["borde"]),
+                             border_radius=2),
+                ft.Text(v["label"], size=10),
+            ], spacing=3)
+            for v in ESTADOS_DIENTE.values()
+        ], wrap=True, spacing=10)
 
-        self.tf_nombre       = ft.TextField(label="Nombre *",  value=p.get("nombre", ""),  expand=True)
-        self.tf_apellido     = ft.TextField(label="Apellido *", value=p.get("apellido", ""), expand=True)
-        self.tf_dni          = ft.TextField(label="DNI",        value=p.get("dni", ""),      expand=True)
-        self.tf_fecha_nac    = ft.TextField(label="Fecha Nac. (YYYY-MM-DD)",
-                                            value=p.get("fecha_nac") or "", expand=True)
-        self.tf_telefono     = ft.TextField(label="Teléfono",   value=p.get("telefono", ""), expand=True)
-        self.tf_email        = ft.TextField(label="Email",      value=p.get("email", ""),
-                                            expand=True, keyboard_type=ft.KeyboardType.EMAIL)
-        self.tf_obra_social  = ft.TextField(label="Obra Social",value=p.get("obra_social", ""), expand=True)
-        self.tf_nro_afiliado = ft.TextField(label="Nº Afiliado",value=p.get("nro_afiliado",""), expand=True)
-        self.tf_direccion    = ft.TextField(label="Dirección",  value=p.get("direccion", ""),   expand=True)
-        self.tf_alergias     = ft.TextField(label="Alergias / Medicación actual",
-                                            value=p.get("alergias", ""), multiline=True, min_lines=2)
-        self.dd_grupo = ft.Dropdown(
-            label="Grupo Sanguíneo", value=p.get("grupo_sangre"),
-            options=[ft.dropdown.Option(g) for g in
-                     ["A+","A−","B+","B−","AB+","AB−","O+","O−"]],
-            width=160,
-        )
-
-        cbs = [
-            ft.Checkbox(label=label, value=ant.get(key, False), col={"sm": 6, "md": 4})
-            for key, label in ANTECEDENTES_CAMPOS
-        ]
-        self._checks = {key: cbs[i] for i, (key, _) in enumerate(ANTECEDENTES_CAMPOS)}
-
-        self.controls = [
-            ft.Text("Identificación", size=14, weight=ft.FontWeight.BOLD, color="#1565C0"),
-            ft.Row(controls=[self.tf_nombre, self.tf_apellido], spacing=8),
-            ft.Row(controls=[self.tf_dni, self.tf_fecha_nac, self.dd_grupo], spacing=8),
-            ft.Row(controls=[self.tf_telefono, self.tf_email], spacing=8),
-            ft.Row(controls=[self.tf_obra_social, self.tf_nro_afiliado], spacing=8),
-            self.tf_direccion,
-            ft.Divider(),
-            ft.Text("Antecedentes Médicos", size=14, weight=ft.FontWeight.BOLD, color="#1565C0"),
-            ft.ResponsiveRow(controls=cbs),
-            self.tf_alergias,
-            ft.Divider(),
-            ft.FilledButton(
-                "Guardar Ficha" if p.get("id") else "Crear Paciente",
-                icon=ft.Icons.SAVE,
-                on_click=self._guardar,
-            ),
-        ]
-
-
-# ── Vista principal del módulo ────────────────────────────────────────────
-
-class PacientesView(ft.Row):
-    def __init__(self):
-        super().__init__(expand=True, spacing=0)
-        self._todos: list[dict] = []
-        self._paciente_activo: dict | None = None
-
-        self._lista_col  = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO, expand=True)
-        self._detalle_col = ft.Column(expand=True, visible=False, spacing=8)
-        self._tf_buscar  = ft.TextField(
-            label="Buscar por nombre, apellido o DNI",
-            prefix_icon=ft.Icons.SEARCH,
-            on_change=self._filtrar,
-        )
-
-        panel_izq = ft.Container(
+    def _construir_layout(self):
+        cuadricula = ft.Container(
             content=ft.Column(controls=[
-                ft.Text("Pacientes", size=16, weight=ft.FontWeight.BOLD),
-                self._tf_buscar,
-                ft.FilledButton("+ Nuevo Paciente", icon=ft.Icons.PERSON_ADD,
-                                  on_click=lambda e: self._seleccionar({})),
+                ft.Row(controls=[
+                    ft.Icon(ft.Icons.ARROW_UPWARD, size=12, color="#757575"),
+                    ft.Text("SUPERIOR  (18 → 11 | 21 → 28)",
+                            size=10, color="#616161"),
+                ], spacing=4),
+                ft.Container(
+                    content=self._fila_sup,
+                    bgcolor="#F5F9FF",
+                    border=ft.border.all(1, "#BBDEFB"),
+                    border_radius=4, padding=6,
+                ),
                 ft.Divider(height=4),
-                self._lista_col,
-            ], spacing=8, expand=True),
-            width=270, padding=12,
-            border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
+                ft.Row(controls=[
+                    ft.Icon(ft.Icons.ARROW_DOWNWARD, size=12, color="#757575"),
+                    ft.Text("INFERIOR  (48 → 41 | 31 → 38)",
+                            size=10, color="#616161"),
+                ], spacing=4),
+                ft.Container(
+                    content=self._fila_inf,
+                    bgcolor="#F5FFF5",
+                    border=ft.border.all(1, "#C8E6C9"),
+                    border_radius=4, padding=6,
+                ),
+                ft.Divider(height=6),
+                ft.Text("Leyenda (clic en superficie del panel derecho):",
+                        size=10, color="#757575"),
+                self._leyenda(),
+                ft.Container(height=4),
+                ft.Row(controls=[
+                    ft.Container(width=10, height=10,
+                                 bgcolor="#1565C0", border_radius=2),
+                    ft.Text("= tiene diagnóstico registrado",
+                            size=10, color="#424242"),
+                ], spacing=5),
+            ], spacing=6),
+            border=ft.border.all(1, "#E0E0E0"),
+            border_radius=6, padding=10,
         )
-        panel_der = ft.Container(content=self._detalle_col, expand=True, padding=12)
-        self.controls = [panel_izq, panel_der]
+        self.controls = [
+            ft.Row(controls=[cuadricula, self._panel], spacing=12,
+                   expand=True,
+                   vertical_alignment=ft.CrossAxisAlignment.START),
+        ]
 
-    def did_mount(self):
-        self._cargar_lista()
 
-    def _snack(self, mensaje: str, error: bool = False):
-        if self.page:
+# ── Historia Clínica completa para un paciente ─────────────────────────────
+
+class HistoriaClinicaView(ft.Column):
+    """
+    Formulario completo de Historia Clínica Odontológica.
+    Se instancia con un paciente_id específico.
+    """
+
+    def __init__(self, paciente_id: str, snack_fn=None):
+        super().__init__(spacing=6, expand=True, scroll=ft.ScrollMode.AUTO)
+        self.paciente_id = paciente_id
+        self.snack_fn    = snack_fn
+        self._historia   = {}
+        self._cb_map: dict[str, ft.Checkbox] = {}
+        self._odontograma_view: OdontogramaDiagnosticoView | None = None
+        self._construir()
+
+    def _snack(self, msg: str, error: bool = False):
+        if self.snack_fn:
+            self.snack_fn(msg, error)
+        elif self.page:
             self.page.snack_bar = ft.SnackBar(
-                content=ft.Text(mensaje),
+                content=ft.Text(msg),
                 bgcolor=ft.Colors.RED_700 if error else ft.Colors.GREEN_700,
                 open=True,
             )
             self.page.update()
 
-    def _cargar_lista(self):
-        try:
-            self._todos = listar_pacientes()
-        except Exception as ex:
-            self._todos = []
-            self._snack(f"Error al cargar pacientes: {ex}", error=True)
-        self._refrescar_lista(self._todos)
-
-    def _refrescar_lista(self, pacientes: list[dict]):
-        self._lista_col.controls.clear()
-        if not pacientes:
-            self._lista_col.controls.append(
-                ft.Text("Sin resultados.", color="#9E9E9E", size=12)
-            )
-        for p in pacientes:
-            activo = (self._paciente_activo is not None
-                      and p.get("id") == self._paciente_activo.get("id"))
-            self._lista_col.controls.append(
-                ft.ListTile(
-                    title=ft.Text(f"{p.get('apellido','')}, {p.get('nombre','')}", size=13),
-                    subtitle=ft.Text(p.get("dni", ""), size=11),
-                    selected=activo,
-                    on_click=lambda e, pac=p: self._seleccionar(pac),
-                    content_padding=ft.padding.symmetric(horizontal=8),
-                )
-            )
-        if self._lista_col.page:
-            self._lista_col.update()
-
-    def _filtrar(self, e):
-        texto = (e.control.value or "").lower().strip()
-        filtrado = self._todos if not texto else [
-            p for p in self._todos
-            if texto in (p.get("apellido") or "").lower()
-            or texto in (p.get("nombre") or "").lower()
-            or texto in (p.get("dni") or "").lower()
-        ]
-        self._refrescar_lista(filtrado)
-
-    def _seleccionar(self, paciente: dict):
-        self._paciente_activo = paciente
-        self._mostrar_detalle(paciente)
-        self._refrescar_lista(self._todos)
-
-    def _on_guardado(self, paciente: dict):
-        ids = [p["id"] for p in self._todos]
-        if paciente.get("id") not in ids:
-            self._todos.insert(0, paciente)
-        else:
-            self._todos[ids.index(paciente["id"])] = paciente
-        self._paciente_activo = paciente
-        self._refrescar_lista(self._todos)
-        self._mostrar_detalle(paciente)
-
-    def _mostrar_detalle(self, paciente: dict):
-        nombre_display = (
-            "Nuevo Paciente" if not paciente.get("id")
-            else f"{paciente.get('apellido','')}, {paciente.get('nombre','')}"
+    def _tf(self, label: str, value: str = "", width=None,
+            multiline=False, min_lines=1, expand=False) -> ft.TextField:
+        return ft.TextField(
+            label=label, value=value or "",
+            multiline=multiline, min_lines=min_lines,
+            width=width, expand=expand, dense=True,
         )
 
-        # Definir pestañas disponibles
-        definiciones = [
-            ("Ficha Clínica",     ft.Icons.PERSON,
-             ft.Container(
-                 content=FichaClinicaView(paciente,
-                                          on_guardado=self._on_guardado,
-                                          snack_fn=self._snack),
-                 padding=16, expand=True,
-             )),
-        ]
-        if paciente.get("id"):
-            definiciones += [
-                ("Constantes Vitales", ft.Icons.MONITOR_HEART,
-                 ft.Container(
-                     content=ConstantesView(paciente["id"], snack_fn=self._snack),
-                     padding=16, expand=True,
-                 )),
-                ("Odontograma", ft.Icons.GRID_VIEW,
-                 ft.Container(
-                     content=OdontogramaView(paciente["id"], snack_fn=self._snack),
-                     padding=16, expand=True,
-                 )),
-            ]
+    def _construir(self):
+        try:
+            self._historia = obtener_historia_clinica(self.paciente_id) or {}
+        except Exception:
+            self._historia = {}
 
-        # Estado mutable de la pestaña activa
-        activo = [0]
-        barra_tabs = ft.Row(spacing=4)
-        area_contenido = ft.Container(expand=True)
+        h   = self._historia
+        sv  = h.get("signos_vitales") or {}
+        ant = h.get("antecedentes") or {}
+        dd  = h.get("diagnostico_dental") or {}
 
-        def _seleccionar_tab(idx: int):
-            activo[0] = idx
-            # Actualizar botones
-            for i, btn in enumerate(barra_tabs.controls):
-                btn.style = ft.ButtonStyle(
-                    bgcolor=ft.Colors.BLUE_700 if i == idx else ft.Colors.GREY_200,
-                    color=ft.Colors.WHITE if i == idx else ft.Colors.GREY_800,
-                )
-            # Mostrar contenido correspondiente
-            area_contenido.content = definiciones[idx][2]
-            if barra_tabs.page:
-                barra_tabs.update()
-                area_contenido.update()
+        fecha_hoy = str(h.get("fecha_elaboracion") or datetime.date.today())[:10]
 
-        # Construir botones de pestañas
-        for i, (nombre, icono, _) in enumerate(definiciones):
-            idx_capturado = i
-            barra_tabs.controls.append(
-                ft.ElevatedButton(
-                    nombre,
-                    icon=icono,
-                    on_click=lambda e, n=idx_capturado: _seleccionar_tab(n),
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.BLUE_700 if i == 0 else ft.Colors.GREY_200,
-                        color=ft.Colors.WHITE if i == 0 else ft.Colors.GREY_800,
-                    ),
-                )
-            )
+        self.tf_historia_no = self._tf("N° Historia", h.get("historia_no",""), width=160)
+        self.tf_odontologo  = self._tf("Odontólogo responsable", h.get("odontologo",""), expand=True)
+        self.tf_fecha       = self._tf("Fecha", fecha_hoy, width=140)
+        self.tf_motivo      = self._tf("Motivo de consulta",
+                                       h.get("motivo_consulta",""),
+                                       multiline=True, min_lines=2, expand=True)
+        self.tf_enfermedad  = self._tf("Enfermedad actual",
+                                       h.get("enfermedad_actual",""),
+                                       multiline=True, min_lines=2, expand=True)
+        self.tf_estatura    = self._tf("Estatura (cm)", sv.get("estatura",""), width=120)
+        self.tf_peso        = self._tf("Peso (kg)",     sv.get("peso",""),     width=110)
+        self.tf_temp        = self._tf("Temp. (°C)",    sv.get("temperatura",""), width=110)
+        self.tf_pulso       = self._tf("Pulso (bpm)",   sv.get("pulso",""),    width=110)
+        self.tf_tension     = self._tf("T.A. (mmHg)",   sv.get("tension_arterial",""), width=120)
+        self.tf_fr          = self._tf("F.R. (rpm)",    sv.get("frecuencia_resp",""),  width=110)
+        self.dd_vih         = ft.Dropdown(
+            label="VIH",
+            value=sv.get("vih", "Negativo"),
+            options=[ft.dropdown.Option(o) for o in VIH_OPTIONS],
+            width=150, dense=True,
+        )
 
-        # Contenido inicial
-        area_contenido.content = definiciones[0][2]
+        self._cb_map = {}
+        for key, _ in ANTECEDENTES:
+            self._cb_map[key] = ft.Checkbox(value=bool(ant.get(key, False)), label="")
 
-        self._detalle_col.controls = [
-            ft.Text(nombre_display, size=18, weight=ft.FontWeight.BOLD),
+        mitad   = (len(ANTECEDENTES) + 1) // 2
+        col_izq = ft.Column(spacing=2)
+        col_der = ft.Column(spacing=2)
+        for i, (key, label) in enumerate(ANTECEDENTES):
+            fila = ft.Row(controls=[
+                self._cb_map[key],
+                ft.Text(label, size=12, expand=True),
+            ], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            (col_izq if i < mitad else col_der).controls.append(fila)
+
+        self._odontograma_view = OdontogramaDiagnosticoView(
+            paciente_id=self.paciente_id,
+            diagnostico_dental=dd,
+            snack_fn=self._snack,
+        )
+
+        self.tf_observaciones = self._tf(
+            "Observaciones y notas adicionales",
+            h.get("observaciones",""),
+            multiline=True, min_lines=3, expand=True,
+        )
+
+        existe  = bool(h.get("id"))
+        lbl_btn = "Actualizar Historia Clínica" if existe else "Guardar Historia Clínica"
+
+        self.controls = [
             ft.Container(
-                content=barra_tabs,
-                padding=ft.padding.symmetric(0, 4),
-                border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
+                content=ft.Row(controls=[
+                    ft.Icon(ft.Icons.MEDICAL_INFORMATION, size=22, color="#1565C0"),
+                    ft.Text("Historia Clínica Odontológica",
+                            size=17, weight=ft.FontWeight.BOLD, color="#1565C0"),
+                ], spacing=10),
+                padding=ft.padding.only(bottom=4),
             ),
-            area_contenido,
+            _seccion("1. INFORMACIÓN GENERAL", ft.Icons.INFO_OUTLINE),
+            ft.Row(controls=[
+                self.tf_historia_no, self.tf_odontologo, self.tf_fecha,
+            ], spacing=10, wrap=True),
+            _seccion("2. ANAMNESIS", ft.Icons.NOTES),
+            self.tf_motivo,
+            self.tf_enfermedad,
+            _seccion("3. SIGNOS VITALES", ft.Icons.MONITOR_HEART),
+            ft.Row(controls=[
+                self.tf_estatura, self.tf_peso, self.tf_temp,
+                self.tf_pulso, self.tf_tension, self.tf_fr, self.dd_vih,
+            ], spacing=8, wrap=True),
+            _seccion("4. ANTECEDENTES MÉDICOS Y ODONTOLÓGICOS",
+                     ft.Icons.HEALTH_AND_SAFETY),
+            ft.Container(
+                content=ft.Row(controls=[
+                    ft.Container(content=col_izq, expand=True),
+                    ft.VerticalDivider(width=1, color="#E0E0E0"),
+                    ft.Container(content=col_der, expand=True),
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+                border=ft.border.all(1, "#E0E0E0"),
+                border_radius=6, padding=10,
+            ),
+            _seccion("5. ODONTOGRAMA Y DIAGNÓSTICO POR PIEZA",
+                     ft.Icons.MEDICAL_SERVICES),
+            ft.Text(
+                "Clic en un diente → marcá las superficies y escribí el diagnóstico → "
+                "«Guardar pieza». Indicador azul = pieza con diagnóstico.",
+                size=11, color="#616161", italic=True,
+            ),
+            ft.Container(
+                content=self._odontograma_view,
+                border=ft.border.all(1, "#E0E0E0"),
+                border_radius=6, padding=8,
+                height=420,
+            ),
+            _seccion("6. OBSERVACIONES", ft.Icons.EDIT_NOTE),
+            self.tf_observaciones,
+            ft.Container(
+                content=ft.FilledButton(lbl_btn, icon=ft.Icons.SAVE,
+                                        on_click=self._guardar),
+                padding=ft.padding.symmetric(vertical=10),
+            ),
         ]
-        self._detalle_col.visible = True
-        if self._detalle_col.page:
-            self._detalle_col.update()
+
+    def _guardar(self, e):
+        signos_vitales = {
+            "estatura":         self.tf_estatura.value.strip(),
+            "peso":             self.tf_peso.value.strip(),
+            "temperatura":      self.tf_temp.value.strip(),
+            "pulso":            self.tf_pulso.value.strip(),
+            "tension_arterial": self.tf_tension.value.strip(),
+            "frecuencia_resp":  self.tf_fr.value.strip(),
+            "vih":              self.dd_vih.value or "Negativo",
+        }
+        antecedentes = {key: self._cb_map[key].value for key, _ in ANTECEDENTES}
+        diagnostico_dental = (
+            self._odontograma_view.diagnosticos if self._odontograma_view else {}
+        )
+        datos = {
+            "historia_no":        self.tf_historia_no.value.strip(),
+            "odontologo":         self.tf_odontologo.value.strip(),
+            "fecha_elaboracion":  self.tf_fecha.value.strip() or str(datetime.date.today()),
+            "motivo_consulta":    self.tf_motivo.value.strip(),
+            "enfermedad_actual":  self.tf_enfermedad.value.strip(),
+            "signos_vitales":     signos_vitales,
+            "antecedentes":       antecedentes,
+            "diagnostico_dental": diagnostico_dental,
+            "observaciones":      self.tf_observaciones.value.strip(),
+        }
+        try:
+            guardar_historia_clinica(self.paciente_id, datos)
+            self._snack("Historia Clínica guardada correctamente.")
+        except Exception as ex:
+            self._snack(f"Error al guardar: {ex}", error=True)
+
+
+# ── Vista principal del módulo Pacientes ──────────────────────────────────
+
+class PacientesView(ft.Column):
+    """
+    Módulo principal de Pacientes.
+    Muestra un selector de paciente y carga su Historia Clínica completa.
+    """
+
+    def __init__(self):
+        super().__init__(spacing=0, expand=True)
+        self.paciente_id: str | None = None
+        self._area = ft.Container(
+            expand=True,
+            padding=ft.padding.all(16),
+            content=ft.Column(controls=[
+                ft.Icon(ft.Icons.PERSON_SEARCH, size=48, color="#BDBDBD"),
+                ft.Text("Seleccioná un paciente para ver su Historia Clínica",
+                        color="#9E9E9E", size=14, italic=True),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+               alignment=ft.MainAxisAlignment.CENTER,
+               expand=True),
+        )
+        self._construir()
+
+    def _construir(self):
+        try:
+            pacientes = listar_pacientes()
+        except Exception:
+            pacientes = []
+
+        self.dd_selector = ft.Dropdown(
+            label="Seleccionar paciente",
+            hint_text="Elegí un paciente de la lista...",
+            options=[
+                ft.dropdown.Option(
+                    p["id"],
+                    f"{p.get('apellido','–')}, {p.get('nombre','')}",
+                )
+                for p in sorted(pacientes,
+                                 key=lambda x: x.get("apellido",""))
+            ],
+            on_select=self._on_selector,
+            width=420,
+        )
+
+        self.controls = [
+            ft.Container(
+                content=ft.Column(controls=[
+                    ft.Text("Historia Clínica de Pacientes",
+                            size=18, weight=ft.FontWeight.BOLD),
+                    self.dd_selector,
+                ], spacing=10),
+                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+            ),
+            ft.Divider(height=1, color="#E0E0E0"),
+            self._area,
+        ]
+
+    def _on_selector(self, e):
+        pid = self.dd_selector.value
+        if not pid:
+            return
+        self.paciente_id = pid
+        self._area.content = HistoriaClinicaView(
+            paciente_id=pid,
+            snack_fn=self._snack,
+        )
+        if self._area.page:
+            self._area.update()
+
+    def _snack(self, msg: str, error: bool = False):
+        if self.page:
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text(msg),
+                bgcolor=ft.Colors.RED_700 if error else ft.Colors.GREEN_700,
+                open=True,
+            )
+            self.page.update()
