@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11"]
+modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -54,3 +54,9 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+ADMIN_USUARIO = "Admin"
+ADMIN_PASSWORD_HASH = "$2b$12$SzDXdQNEXHWUVorHN.M7COctzEFjoqLS8ISIc/Lptjt6IYtLvs/2u"

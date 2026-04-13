@@ -351,6 +351,31 @@ def eliminar_pago(pago_id: str):
     return get_client().table("pagos").delete().eq("id", pago_id).execute().data
 
 
+# ── USUARIOS / AUTENTICACIÓN ──────────────────────────────────────────────
+
+def obtener_usuario_por_nombre(usuario: str):
+    """Devuelve el registro del usuario o None si no existe."""
+    resultado = (
+        get_client()
+        .table("usuarios")
+        .select("*")
+        .eq("usuario", usuario)
+        .eq("activo", True)
+        .execute()
+        .data
+    )
+    return resultado[0] if resultado else None
+
+
+def registrar_acceso(usuario_id: str):
+    """Actualiza el campo ultimo_acceso con la hora actual."""
+    get_client().table("usuarios").update(
+        {"ultimo_acceso": "now()"}
+    ).eq("id", usuario_id).execute()
+
+
+# ── SALDO ─────────────────────────────────────────────────────────────────
+
 def saldo_pendiente(paciente_id: str) -> float:
     tratamientos = listar_tratamientos(paciente_id)
     pagos = listar_pagos(paciente_id)

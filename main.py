@@ -1,11 +1,33 @@
 import os
 import threading
+import bcrypt
 import flet as ft
 from modulo_pacientes import PacientesView
 from especialistas import EspecialistasView
 from modulo_agenda import AgendaView
 from modulo_tratamientos import TratamientosView
 from modulo_pagos import PagosView
+
+# ── Autenticación ──────────────────────────────────────────────────────────
+# Credenciales del administrador almacenadas en variables de entorno.
+# ADMIN_USUARIO y ADMIN_PASSWORD_HASH se configuran en los secrets de Replit.
+_ADMIN_USUARIO = os.environ.get("ADMIN_USUARIO", "")
+_ADMIN_HASH    = os.environ.get("ADMIN_PASSWORD_HASH", "").encode()
+
+
+def _verificar_credenciales(usuario: str, password: str) -> dict | None:
+    """
+    Verifica usuario/contraseña contra las credenciales de administrador.
+    Devuelve un dict con los datos del usuario si es válido, None si no.
+    Más adelante se puede extender para consultar la tabla 'usuarios' en Supabase.
+    """
+    if not _ADMIN_USUARIO or not _ADMIN_HASH:
+        return None
+    if usuario != _ADMIN_USUARIO:
+        return None
+    if _ADMIN_HASH and bcrypt.checkpw(password.encode(), _ADMIN_HASH):
+        return {"usuario": usuario, "nombre": "Administrador", "rol": "administrador"}
+    return None
 
 INACTIVIDAD_SEGUNDOS = 300
 PORT = int(os.environ.get("PORT", 8000))
@@ -76,15 +98,40 @@ def _login_view(page: ft.Page) -> ft.View:
                                can_reveal_password=True,
                                prefix_icon=ft.Icons.LOCK, width=320)
     lbl_error   = ft.Text("", color=ft.Colors.RED_700, size=12, visible=False)
+    btn_ingresar = ft.FilledButton("Ingresar", width=320, height=44,
+                                   icon=ft.Icons.LOGIN)
 
     async def ingresar(e):
-        if not tf_usuario.value or not tf_password.value:
+        usuario_str  = (tf_usuario.value or "").strip()
+        password_str = (tf_password.value or "").strip()
+
+        if not usuario_str or not password_str:
             lbl_error.value = "Ingresá usuario y contraseña."
             lbl_error.visible = True
             lbl_error.update()
             return
-        await page.push_route("/pacientes")
 
+        # Deshabilitar botón mientras verifica
+        btn_ingresar.disabled = True
+        btn_ingresar.text = "Verificando…"
+        btn_ingresar.update()
+
+        try:
+            usuario_data = _verificar_credenciales(usuario_str, password_str)
+            if usuario_data is None:
+                raise ValueError("Usuario o contraseña incorrectos.")
+            # Login exitoso — guardar datos de sesión
+            page.data = usuario_data
+            await page.push_route("/pacientes")
+        except Exception as ex:
+            lbl_error.value = str(ex)
+            lbl_error.visible = True
+            lbl_error.update()
+            btn_ingresar.disabled = False
+            btn_ingresar.text = "Ingresar"
+            btn_ingresar.update()
+
+    btn_ingresar.on_click = ingresar
     tf_password.on_submit = ingresar
 
     return ft.View(
@@ -101,8 +148,7 @@ def _login_view(page: ft.Page) -> ft.View:
                         tf_usuario,
                         tf_password,
                         lbl_error,
-                        ft.FilledButton("Ingresar", width=320, height=44,
-                                        icon=ft.Icons.LOGIN, on_click=ingresar),
+                        btn_ingresar,
                     ],
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=14,
