@@ -464,6 +464,22 @@ class _EspecialistasPanel(ft.Column):
             label="Agregar especialista",
             expand=True, dense=True,
         )
+        # Placeholder hasta que did_mount() cargue los datos reales
+        self.controls = [
+            ft.Text("Cargando...", size=12, color="#BDBDBD", italic=True),
+            ft.Row(controls=[
+                self._dd_esp,
+                ft.IconButton(
+                    ft.Icons.PERSON_ADD,
+                    icon_color=ft.Colors.BLUE_700,
+                    tooltip="Asignar especialista",
+                    on_click=self._agregar,
+                ),
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ]
+
+    def did_mount(self):
+        """Carga los datos una vez que el control está en la página."""
         self._recargar()
 
     # ── recarga lista ─────────────────────────────────────────────────────
