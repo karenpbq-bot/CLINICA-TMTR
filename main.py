@@ -40,9 +40,10 @@ async def main(page: ft.Page):
         nonlocal inactividad_timer
         if inactividad_timer:
             inactividad_timer.cancel()
+        # run_task(coro_fn, *args) — pasa la función, no el objeto coroutine
         inactividad_timer = threading.Timer(
             INACTIVIDAD_SEGUNDOS,
-            lambda: page.run_task(page.push_route("/login"))
+            lambda: page.run_task(page.push_route, "/login"),
         )
         inactividad_timer.daemon = True
         inactividad_timer.start()
@@ -56,10 +57,10 @@ async def main(page: ft.Page):
             page.views.append(_app_shell(page.route, page))
         page.update()
 
-    def on_view_pop(e):
+    async def on_view_pop(e):
         page.views.pop()
         top_view = page.views[-1]
-        page.run_task(page.push_route(top_view.route))
+        await page.push_route(top_view.route)
 
     page.on_route_change = on_route_change
     page.on_view_pop = on_view_pop
@@ -69,20 +70,20 @@ async def main(page: ft.Page):
 
 
 def _login_view(page: ft.Page) -> ft.View:
-    tf_usuario   = ft.TextField(label="Usuario", autofocus=True,
-                                prefix_icon=ft.Icons.PERSON, width=320)
-    tf_password  = ft.TextField(label="Contraseña", password=True,
-                                can_reveal_password=True,
-                                prefix_icon=ft.Icons.LOCK, width=320)
-    lbl_error    = ft.Text("", color=ft.Colors.RED_700, size=12, visible=False)
+    tf_usuario  = ft.TextField(label="Usuario", autofocus=True,
+                               prefix_icon=ft.Icons.PERSON, width=320)
+    tf_password = ft.TextField(label="Contraseña", password=True,
+                               can_reveal_password=True,
+                               prefix_icon=ft.Icons.LOCK, width=320)
+    lbl_error   = ft.Text("", color=ft.Colors.RED_700, size=12, visible=False)
 
-    def ingresar(e):
+    async def ingresar(e):
         if not tf_usuario.value or not tf_password.value:
             lbl_error.value = "Ingresá usuario y contraseña."
             lbl_error.visible = True
             lbl_error.update()
             return
-        page.run_task(page.push_route("/pacientes"))
+        await page.push_route("/pacientes")
 
     tf_password.on_submit = ingresar
 
@@ -118,12 +119,12 @@ def _app_shell(route: str, page: ft.Page) -> ft.View:
     ruta_activa = route if route in VISTAS else "/pacientes"
     idx_activo  = INDICE_RUTA.get(ruta_activa, 0)
 
-    def on_nav(e):
+    async def on_nav(e):
         ruta_destino = RUTAS[e.control.selected_index][0]
-        page.run_task(page.push_route(ruta_destino))
+        await page.push_route(ruta_destino)
 
-    def cerrar_sesion(e):
-        page.run_task(page.push_route("/login"))
+    async def cerrar_sesion(e):
+        await page.push_route("/login")
 
     nav = ft.NavigationRail(
         selected_index=idx_activo,
@@ -148,7 +149,7 @@ def _app_shell(route: str, page: ft.Page) -> ft.View:
         bgcolor=ft.Colors.GREY_100,
     )
 
-    vista_fn = VISTAS.get(ruta_activa, VISTAS["/pacientes"])
+    vista_fn  = VISTAS.get(ruta_activa, VISTAS["/pacientes"])
     contenido = vista_fn()
 
     return ft.View(
