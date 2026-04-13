@@ -461,42 +461,80 @@ class PacientesView(ft.Row):
         self._mostrar_detalle(paciente)
 
     def _mostrar_detalle(self, paciente: dict):
-        tabs = [
-            ft.Tab(
-                label="Ficha Clínica", icon=ft.Icons.PERSON,
-                content=ft.Container(
-                    content=FichaClinicaView(paciente,
-                                             on_guardado=self._on_guardado,
-                                             snack_fn=self._snack),
-                    padding=16,
-                ),
-            ),
-        ]
-        if paciente.get("id"):
-            tabs += [
-                ft.Tab(
-                    label="Constantes Vitales", icon=ft.Icons.MONITOR_HEART,
-                    content=ft.Container(
-                        content=ConstantesView(paciente["id"], snack_fn=self._snack),
-                        padding=16,
-                    ),
-                ),
-                ft.Tab(
-                    label="Odontograma", icon=ft.Icons.GRID_VIEW,
-                    content=ft.Container(
-                        content=OdontogramaView(paciente["id"], snack_fn=self._snack),
-                        padding=16,
-                    ),
-                ),
-            ]
-
         nombre_display = (
             "Nuevo Paciente" if not paciente.get("id")
             else f"{paciente.get('apellido','')}, {paciente.get('nombre','')}"
         )
+
+        # Definir pestañas disponibles
+        definiciones = [
+            ("Ficha Clínica",     ft.Icons.PERSON,
+             ft.Container(
+                 content=FichaClinicaView(paciente,
+                                          on_guardado=self._on_guardado,
+                                          snack_fn=self._snack),
+                 padding=16, expand=True,
+             )),
+        ]
+        if paciente.get("id"):
+            definiciones += [
+                ("Constantes Vitales", ft.Icons.MONITOR_HEART,
+                 ft.Container(
+                     content=ConstantesView(paciente["id"], snack_fn=self._snack),
+                     padding=16, expand=True,
+                 )),
+                ("Odontograma", ft.Icons.GRID_VIEW,
+                 ft.Container(
+                     content=OdontogramaView(paciente["id"], snack_fn=self._snack),
+                     padding=16, expand=True,
+                 )),
+            ]
+
+        # Estado mutable de la pestaña activa
+        activo = [0]
+        barra_tabs = ft.Row(spacing=4)
+        area_contenido = ft.Container(expand=True)
+
+        def _seleccionar_tab(idx: int):
+            activo[0] = idx
+            # Actualizar botones
+            for i, btn in enumerate(barra_tabs.controls):
+                btn.style = ft.ButtonStyle(
+                    bgcolor=ft.Colors.BLUE_700 if i == idx else ft.Colors.GREY_200,
+                    color=ft.Colors.WHITE if i == idx else ft.Colors.GREY_800,
+                )
+            # Mostrar contenido correspondiente
+            area_contenido.content = definiciones[idx][2]
+            if barra_tabs.page:
+                barra_tabs.update()
+                area_contenido.update()
+
+        # Construir botones de pestañas
+        for i, (nombre, icono, _) in enumerate(definiciones):
+            idx_capturado = i
+            barra_tabs.controls.append(
+                ft.ElevatedButton(
+                    text=nombre,
+                    icon=icono,
+                    on_click=lambda e, n=idx_capturado: _seleccionar_tab(n),
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.BLUE_700 if i == 0 else ft.Colors.GREY_200,
+                        color=ft.Colors.WHITE if i == 0 else ft.Colors.GREY_800,
+                    ),
+                )
+            )
+
+        # Contenido inicial
+        area_contenido.content = definiciones[0][2]
+
         self._detalle_col.controls = [
             ft.Text(nombre_display, size=18, weight=ft.FontWeight.BOLD),
-            ft.Tabs(tabs=tabs, expand=True),
+            ft.Container(
+                content=barra_tabs,
+                padding=ft.padding.symmetric(0, 4),
+                border=ft.border.only(bottom=ft.BorderSide(1, "#E0E0E0")),
+            ),
+            area_contenido,
         ]
         self._detalle_col.visible = True
         if self._detalle_col.page:
