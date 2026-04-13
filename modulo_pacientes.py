@@ -450,10 +450,11 @@ class OdontogramaView(ft.Column):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _FichaView(ft.Column):
-    def __init__(self, paciente_id: str | None, snack_fn):
+    def __init__(self, paciente_id: str | None, snack_fn, on_creado=None):
         super().__init__(spacing=8, expand=True, scroll=ft.ScrollMode.AUTO)
         self.paciente_id = paciente_id
         self.snack_fn    = snack_fn
+        self._on_creado  = on_creado   # callback(nuevo_id) tras crear
         self._datos: dict = {}
         self._construir()
 
@@ -529,8 +530,11 @@ class _FichaView(ft.Column):
                 actualizar_paciente(self.paciente_id, datos)
                 self.snack_fn("Ficha actualizada correctamente.")
             else:
-                crear_paciente(datos)
+                resultado = crear_paciente(datos)
                 self.snack_fn("Paciente creado correctamente.")
+                nuevo_id = (resultado[0].get("id") if resultado else None)
+                if nuevo_id and self._on_creado:
+                    self._on_creado(nuevo_id)
         except Exception as ex:
             self.snack_fn(f"Error: {ex}", error=True)
 
@@ -897,12 +901,19 @@ class PacientesView(ft.Column):
         self.controls = [
             ft.Container(
                 content=ft.Column(controls=[
-                    ft.Text("Historia Clínica de Pacientes",
-                            size=18, weight=ft.FontWeight.BOLD,
-                            color="#1565C0"),
+                    ft.Row(controls=[
+                        ft.Text("Historia Clínica de Pacientes",
+                                size=18, weight=ft.FontWeight.BOLD,
+                                color="#1565C0"),
+                        ft.FilledButton(
+                            "Nuevo Paciente",
+                            icon=ft.Icons.PERSON_ADD,
+                            on_click=lambda e: self._nuevo_paciente(),
+                        ),
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     self.dd_selector,
                 ], spacing=10),
-                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+                padding=ft.Padding.symmetric(horizontal=16, vertical=12),
             ),
             ft.Divider(height=1, color="#E0E0E0"),
             self._barra_tabs,
@@ -945,13 +956,53 @@ class PacientesView(ft.Column):
         if self._barra_tabs.page:
             self._barra_tabs.update()
 
+    def _nuevo_paciente(self):
+        """Muestra el formulario vacío para crear un nuevo paciente."""
+        self.paciente_id = None
+        self.dd_selector.value = None
+        if self.dd_selector.page:
+            self.dd_selector.update()
+        self._tab_activo = 0
+        self._barra_tabs.visible = True
+        self._actualizar_tabs()
+        ficha = _FichaView(None, self._snack, on_creado=self._on_paciente_creado)
+        self._area.content = ficha
+        if self._area.page:
+            self._area.update()
+        if self._barra_tabs.page:
+            self._barra_tabs.update()
+
+    def _on_paciente_creado(self, nuevo_id: str):
+        """Llamado tras crear un paciente: refresca el dropdown y lo selecciona."""
+        self.paciente_id = nuevo_id
+        if self.page:
+            try:
+                self.page.session.set("paciente_id", nuevo_id)
+            except Exception:
+                pass
+        try:
+            pacientes = listar_pacientes()
+        except Exception:
+            pacientes = []
+        self.dd_selector.options = [
+            ft.dropdown.Option(
+                p["id"],
+                f"{p.get('apellido','–')}, {p.get('nombre','')}  "
+                f"({'DNI: '+p['dni'] if p.get('dni') else 'sin DNI'})",
+            )
+            for p in sorted(pacientes, key=lambda x: x.get("apellido", ""))
+        ]
+        self.dd_selector.value = nuevo_id
+        if self.dd_selector.page:
+            self.dd_selector.update()
+
     def _cargar_area(self):
         if not self.paciente_id:
             return
         pid = self.paciente_id
         snack = self._snack
         if self._tab_activo == 0:
-            contenido = _FichaView(pid, snack)
+            contenido = _FichaView(pid, snack, on_creado=self._on_paciente_creado)
         elif self._tab_activo == 1:
             contenido = _AnamnesisView(pid, snack)
         elif self._tab_activo == 2:
