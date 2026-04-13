@@ -236,7 +236,7 @@ class OdontogramaView(ft.Column):
                           label: str) -> ft.ElevatedButton:
         activa = key == self.herramienta
         btn = ft.ElevatedButton(
-            text=label, height=30,
+            label, height=30,
             style=ft.ButtonStyle(
                 bgcolor=color if activa else "#F5F5F5",
                 color="#000000" if color in ("#FFFFFF", "#FDD835") else ("#FFFFFF" if activa else "#424242"),
@@ -811,7 +811,7 @@ class PacientesView(ft.Column):
         self._tab_btns = []
         for i, (lbl, icn) in enumerate(_TABS):
             btn = ft.ElevatedButton(
-                text=lbl,
+                lbl,
                 icon=icn,
                 on_click=lambda e, idx=i: self._sel_tab(idx),
                 style=ft.ButtonStyle(
