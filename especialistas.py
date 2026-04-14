@@ -490,17 +490,17 @@ class FormularioEspecialista(ft.Column):
         self._construir()
 
     def _guardar(self, e):
-        if not self.tf_nombre.value.strip() or not self.tf_apellido.value.strip():
+        if not (self.tf_nombre.value or "").strip() or not (self.tf_apellido.value or "").strip():
             if self.snack_fn:
                 self.snack_fn("Nombre y Apellido son obligatorios.", error=True)
             return
         especialidades = [esp for esp, cb in self._esp_checks.items() if cb.value]
         datos = {
-            "nombre":         self.tf_nombre.value.strip(),
-            "apellido":       self.tf_apellido.value.strip(),
-            "matricula":      self.tf_matricula.value.strip() or None,
-            "telefono":       self.tf_telefono.value.strip() or None,
-            "email":          self.tf_email.value.strip() or None,
+            "nombre":         (self.tf_nombre.value    or "").strip(),
+            "apellido":       (self.tf_apellido.value  or "").strip(),
+            "matricula":      (self.tf_matricula.value or "").strip() or None,
+            "telefono":       (self.tf_telefono.value  or "").strip() or None,
+            "email":          (self.tf_email.value     or "").strip() or None,
             "especialidades": especialidades,
         }
         try:
