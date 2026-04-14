@@ -123,30 +123,25 @@ class _DienteMini(ft.Column):
 class _OdontogramaRef(ft.Column):
     """
     Odontograma de referencia (sólo lectura, escala reducida).
-    Carga datos via did_mount().
+    Siempre visible — sin toggle. Carga datos via did_mount().
     """
 
     def __init__(self, paciente_id: str):
         super().__init__(spacing=4)
         self.paciente_id = paciente_id
         self._datos: dict = {}
-        self._expandido: bool = False
-
-        self._icono_toggle = ft.Icon(ft.Icons.EXPAND_MORE, size=16, color="#1565C0")
-        self._cuerpo = ft.Container(visible=False, padding=ft.padding.only(top=4))
+        self._cuerpo = ft.Container()
 
         self.controls = [
             ft.Container(
                 content=ft.Row(controls=[
                     ft.Icon(ft.Icons.GRID_VIEW, size=14, color="#1565C0"),
-                    ft.Text("Odontograma de referencia", size=12,
-                            color="#1565C0", weight=ft.FontWeight.W_500),
-                    self._icono_toggle,
+                    ft.Text("Odontograma de referencia",
+                            size=12, color="#1565C0", weight=ft.FontWeight.W_500),
+                    ft.Text("(solo lectura)", size=10, color="#9E9E9E", italic=True),
                 ], spacing=6),
-                on_click=self._toggle,
-                ink=True,
                 border=ft.border.all(1, "#BBDEFB"),
-                border_radius=6,
+                border_radius=ft.border_radius.only(top_left=6, top_right=6),
                 bgcolor="#E3F2FD",
                 padding=ft.padding.symmetric(horizontal=10, vertical=6),
             ),
@@ -159,15 +154,7 @@ class _OdontogramaRef(ft.Column):
             self._datos = {r["diente"]: r.get("caras", {}) for r in filas}
         except Exception:
             self._datos = {}
-
-    def _toggle(self, e):
-        self._expandido = not self._expandido
-        self._icono_toggle.name = (
-            ft.Icons.EXPAND_LESS if self._expandido else ft.Icons.EXPAND_MORE
-        )
-        if self._expandido and not self._cuerpo.content:
-            self._cuerpo.content = self._construir_grid()
-        self._cuerpo.visible = self._expandido
+        self._cuerpo.content = self._construir_grid()
         if self.page:
             self.update()
 
@@ -483,20 +470,15 @@ class TratamientosView(ft.Column):
             self._tarjeta("Realizado",     total_realizado, "#2E7D32"),
         ], spacing=8)
 
-        # Odontograma de referencia
-        odonto_ref = _OdontogramaRef(self.paciente_id)
-
-        # Botones de acción
+        # ── Columna izquierda: tarjetas + formulario ──────────────────────
         btn_agregar = ft.FilledButton(
             "- Cerrar formulario" if self._mostrar_form else "+ Agregar Tratamiento",
             icon=ft.Icons.REMOVE if self._mostrar_form else ft.Icons.ADD,
             on_click=lambda e: self._toggle_form(),
         )
 
-        # Formulario inline
-        form_area: ft.Control
         if self._mostrar_form:
-            form_area = _FormularioInline(
+            form_area: ft.Control = _FormularioInline(
                 self.paciente_id,
                 tratamiento=self._tratamiento_activo or {},
                 on_guardado=self._on_guardado,
@@ -505,7 +487,29 @@ class TratamientosView(ft.Column):
         else:
             form_area = ft.Container(height=0)
 
-        # Lista de ítems
+        col_izq = ft.Column(
+            controls=[tarjetas, btn_agregar, form_area],
+            spacing=10,
+            expand=True,
+        )
+
+        # ── Columna derecha: odontograma de referencia ────────────────────
+        odonto_ref = _OdontogramaRef(self.paciente_id)
+        col_der = ft.Container(
+            content=odonto_ref,
+            width=430,
+            border=ft.border.all(1, "#E0E0E0"),
+            border_radius=8,
+            padding=0,
+        )
+
+        panel_superior = ft.Row(
+            controls=[col_izq, col_der],
+            spacing=16,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
+        # ── Lista de tratamientos ──────────────────────────────────────────
         items = []
         for t in tratamientos:
             estado = t.get("estado", "presupuestado")
@@ -551,25 +555,40 @@ class TratamientosView(ft.Column):
                 border=ft.border.all(1, "#E0E0E0"),
             ))
 
+        encabezado_lista = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.LIST_ALT, size=14, color="#1565C0"),
+                ft.Text("Tratamientos del Plan", size=12,
+                        color="#1565C0", weight=ft.FontWeight.W_600),
+                ft.Text(f"({len(tratamientos)} ítem{'s' if len(tratamientos) != 1 else ''})",
+                        size=11, color="#9E9E9E"),
+            ], spacing=6),
+            bgcolor="#E3F2FD",
+            border=ft.border.all(1, "#BBDEFB"),
+            border_radius=6,
+            padding=ft.padding.symmetric(horizontal=10, vertical=6),
+        )
+
         lista = ft.Column(
-            controls=items or [
-                ft.Text("Sin tratamientos registrados.", color="#9E9E9E",
-                        italic=True)
-            ],
+            controls=[encabezado_lista] + (
+                items or [
+                    ft.Container(
+                        content=ft.Text("Sin tratamientos registrados.",
+                                        color="#9E9E9E", italic=True),
+                        padding=ft.padding.symmetric(vertical=8, horizontal=4),
+                    )
+                ]
+            ),
             spacing=6,
         )
 
         return ft.Column(
             controls=[
-                odonto_ref,
-                ft.Divider(height=8, color="#E0E0E0"),
-                tarjetas,
-                ft.Row(controls=[btn_agregar], spacing=8),
-                form_area,
-                ft.Divider(height=4, color="#E0E0E0"),
+                panel_superior,
+                ft.Divider(height=6, color="#E0E0E0"),
                 lista,
             ],
-            spacing=10, scroll=ft.ScrollMode.AUTO,
+            spacing=12, scroll=ft.ScrollMode.AUTO,
         )
 
     @staticmethod
