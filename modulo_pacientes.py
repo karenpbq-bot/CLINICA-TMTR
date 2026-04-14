@@ -620,7 +620,7 @@ class _FichaView(ft.ListView):
         )
         self.tf_alergias  = _tf("Alergias conocidas",
                                  d.get("alergias",""),
-                                 multiline=True, min_lines=3)
+                                 multiline=True, min_lines=6)
 
         lbl_btn = "Actualizar ficha" if self.paciente_id else "Crear paciente"
 
@@ -663,14 +663,18 @@ class _FichaView(ft.ListView):
             spacing=8, expand=True,
         )
 
-        # ── Columna derecha: Cobertura médica + Alergias ──────────────
+        # ── Columna derecha: Cobertura médica + Alergias + Especialistas ─
         col_der = ft.Column(
             controls=[
                 _titulo("COBERTURA MÉDICA", ft.Icons.HEALTH_AND_SAFETY),
                 ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
 
                 _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
-                self.tf_alergias,
+                # Row con expand=True en el TextField → mismo ancho que el título
+                ft.Row([self.tf_alergias], spacing=0),
+
+                _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
+                esp_panel,
             ],
             spacing=8, expand=True,
         )
@@ -686,9 +690,6 @@ class _FichaView(ft.ListView):
                 vertical_alignment=ft.CrossAxisAlignment.START,
                 expand=False,
             ),
-
-            _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
-            esp_panel,
 
             ft.Container(
                 content=ft.FilledButton(lbl_btn, icon=ft.Icons.SAVE,
