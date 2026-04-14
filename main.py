@@ -9,6 +9,7 @@ from modulo_agenda import AgendaView
 from modulo_tratamientos import TratamientosView
 from modulo_pagos import PagosView
 from modulo_usuarios import UsuariosView
+from modulo_reportes import ReportesView
 
 # ── Autenticación ──────────────────────────────────────────────────────────
 # Admin de emergencia (opcional) almacenado en variables de entorno.
@@ -52,6 +53,7 @@ RUTAS_BASE = [
     ("/agenda",       "Agenda",       ft.Icons.CALENDAR_MONTH),
     ("/tratamientos", "Tratamientos", ft.Icons.HEALING),
     ("/pagos",        "Pagos",        ft.Icons.ATTACH_MONEY),
+    ("/reportes",     "Reportes",     ft.Icons.ASSESSMENT),
 ]
 
 RUTA_ADMIN = ("/usuarios", "Usuarios", ft.Icons.MANAGE_ACCOUNTS)
@@ -62,6 +64,7 @@ VISTAS = {
     "/agenda":        lambda: AgendaView(),
     "/tratamientos":  lambda: TratamientosView(),
     "/pagos":         lambda: PagosView(),
+    "/reportes":      lambda: ReportesView(),
     "/usuarios":      lambda: UsuariosView(),
 }
 

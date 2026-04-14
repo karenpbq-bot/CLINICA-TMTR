@@ -615,3 +615,295 @@ def exportar_historia_clinica(paciente_id: str, output_dir: str | None = None) -
     # ── Construir PDF ─────────────────────────────────────────────────────
     doc.build(historia_items)
     return ruta_pdf
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  REPORTES GENERALES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _doc_reporte(nombre_archivo: str, titulo: str, subtitulo: str,
+                 output_dir: str) -> tuple:
+    """Crea un SimpleDocTemplate y devuelve (doc, items_iniciales, ancho_util, estilos)."""
+    margen_h = 15 * mm
+    margen_v = 12 * mm
+    ruta     = os.path.join(output_dir, nombre_archivo)
+    os.makedirs(output_dir, exist_ok=True)
+    doc = SimpleDocTemplate(
+        ruta,
+        pagesize=A4,
+        leftMargin=margen_h, rightMargin=margen_h,
+        topMargin=margen_v,  bottomMargin=margen_v,
+    )
+    W    = A4[0] - 2 * margen_h
+    st   = _estilos()
+    hoy  = datetime.today().strftime("%d/%m/%Y  %H:%M")
+
+    items = [
+        Paragraph("CONSULTORIO ODONTOLÓGICO", st["header_titulo"]),
+        Paragraph(titulo, st["header_sub"]),
+        Paragraph(subtitulo, ParagraphStyle(
+            "sub2", fontSize=8, textColor=_TEXTO_GRI, alignment=TA_CENTER)),
+        Spacer(1, 4),
+        HRFlowable(width=W, thickness=1.5, color=_AZUL_OSC),
+        Paragraph(
+            f"Generado: {hoy}",
+            ParagraphStyle("gen_date", fontSize=7, textColor=_TEXTO_GRI,
+                           alignment=TA_RIGHT),
+        ),
+        Spacer(1, 6),
+    ]
+    return doc, items, W, st
+
+
+def _tabla_reporte(encabezados: list[str], filas_data: list[list],
+                   col_widths: list[float]) -> Table:
+    """Tabla de datos estándar para reportes."""
+    from reportlab.lib.colors import HexColor as HC
+    def _p(txt, bold=False):
+        return Paragraph(str(txt) if txt is not None else "—",
+                         ParagraphStyle(
+                             "tc", fontSize=7.5,
+                             fontName="Helvetica-Bold" if bold else "Helvetica",
+                             textColor=_TEXTO_OSC if not bold else HC("#FFFFFF"),
+                         ))
+
+    cabecera = [_p(h, bold=True) for h in encabezados]
+    datos    = [[_p(c) for c in fila] for fila in filas_data]
+    tabla    = Table([cabecera] + datos, colWidths=col_widths, repeatRows=1)
+    n        = len(datos)
+    estilos  = [
+        ("BACKGROUND", (0, 0), (-1, 0), _AZUL_OSC),
+        ("TEXTCOLOR",  (0, 0), (-1, 0), HexColor("#FFFFFF")),
+        ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE",   (0, 0), (-1, -1), 7.5),
+        ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING",   (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
+        ("BOX",  (0, 0), (-1, -1), 0.5, _GRIS_LIN),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, _GRIS_LIN),
+    ]
+    for i in range(n):
+        if i % 2 == 0:
+            estilos.append(("BACKGROUND", (0, i+1), (-1, i+1), _AZUL_CLAR))
+        else:
+            estilos.append(("BACKGROUND", (0, i+1), (-1, i+1), HexColor("#FFFFFF")))
+    tabla.setStyle(TableStyle(estilos))
+    return tabla
+
+
+def _fmt_fecha_pdf(iso: str) -> str:
+    if not iso:
+        return "—"
+    try:
+        return datetime.fromisoformat(
+            iso.replace("Z", "+00:00")).strftime("%d/%m/%Y")
+    except Exception:
+        return str(iso)[:10]
+
+
+def _fmt_monto_pdf(v) -> str:
+    try:
+        return f"$ {float(v):,.2f}"
+    except Exception:
+        return "$ 0,00"
+
+
+def _pie_reporte(hoy: str, W: float) -> list:
+    return [
+        Spacer(1, 8),
+        HRFlowable(width=W, thickness=0.5, color=_GRIS_LIN),
+        Spacer(1, 3),
+        Paragraph(
+            f"Documento generado el {hoy}  ·  Confidencial — uso exclusivo del profesional",
+            ParagraphStyle("pie_r", fontSize=6, textColor=_TEXTO_GRI,
+                           alignment=TA_CENTER),
+        ),
+    ]
+
+
+# ── REPORTE DE CITAS ──────────────────────────────────────────────────────────
+
+def exportar_reporte_citas(datos: list[dict], fecha_desde: str, fecha_hasta: str,
+                            output_dir: str | None = None) -> str:
+    output_dir = output_dir or os.path.join(os.path.dirname(__file__), "pdfs")
+    nombre = f"Reporte_Citas_{fecha_desde}_al_{fecha_hasta}.pdf".replace("/","")
+    hoy    = datetime.today().strftime("%d/%m/%Y  %H:%M")
+
+    doc, items, W, st = _doc_reporte(
+        nombre,
+        "Reporte de Citas",
+        f"Período: {fecha_desde}  →  {fecha_hasta}",
+        output_dir,
+    )
+
+    encabezados = ["Fecha", "Hora", "Paciente", "Especialista", "Motivo", "Estado"]
+    col_w = [W*0.1, W*0.07, W*0.2, W*0.2, W*0.28, W*0.15]
+
+    filas = []
+    est_count: dict[str, int] = {}
+    for c in datos:
+        pac = (c.get("pacientes") or {})
+        esp = (c.get("especialistas") or {})
+        nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
+        nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
+        iso = c.get("fecha_hora","")
+        try:
+            dt    = datetime.fromisoformat(iso.replace("Z","+00:00"))
+            fecha = dt.strftime("%d/%m/%Y")
+            hora  = dt.strftime("%H:%M")
+        except Exception:
+            fecha = iso[:10]; hora = ""
+        estado = c.get("estado","")
+        est_count[estado] = est_count.get(estado, 0) + 1
+        filas.append([fecha, hora, nom_pac or "—", nom_esp or "—",
+                      c.get("motivo","") or "—", estado.capitalize()])
+
+    items.append(_tabla_reporte(encabezados, filas, col_w))
+    items.append(Spacer(1, 8))
+
+    resumen_txt = "  |  ".join(f"{n} {est}" for est, n in sorted(est_count.items()))
+    items.append(Paragraph(
+        f"Total: {len(datos)} citas  —  {resumen_txt}",
+        ParagraphStyle("tot_c", fontSize=8, fontName="Helvetica-Bold",
+                       textColor=_AZUL_OSC),
+    ))
+    items += _pie_reporte(hoy, W)
+
+    doc.build(items)
+    return os.path.join(output_dir, nombre)
+
+
+# ── REPORTE DE INGRESOS ───────────────────────────────────────────────────────
+
+def exportar_reporte_ingresos(datos: list[dict], fecha_desde: str, fecha_hasta: str,
+                               output_dir: str | None = None) -> str:
+    output_dir = output_dir or os.path.join(os.path.dirname(__file__), "pdfs")
+    nombre = f"Reporte_Ingresos_{fecha_desde}_al_{fecha_hasta}.pdf".replace("/","")
+    hoy    = datetime.today().strftime("%d/%m/%Y  %H:%M")
+
+    doc, items, W, st = _doc_reporte(
+        nombre,
+        "Reporte de Ingresos",
+        f"Período: {fecha_desde}  →  {fecha_hasta}",
+        output_dir,
+    )
+
+    encabezados = ["Fecha", "Paciente", "Tratamiento", "Monto", "Método", "Comprobante"]
+    col_w = [W*0.1, W*0.22, W*0.28, W*0.12, W*0.14, W*0.14]
+
+    total   = 0.0
+    met_tot: dict[str, float] = {}
+    filas   = []
+    for p in datos:
+        pac  = (p.get("pacientes") or {})
+        tra  = (p.get("tratamientos") or {})
+        nom  = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
+        met  = p.get("metodo","") or "—"
+        monto = float(p.get("monto", 0))
+        total += monto
+        met_tot[met] = met_tot.get(met, 0) + monto
+        filas.append([
+            _fmt_fecha_pdf(p.get("fecha","")),
+            nom or "—",
+            tra.get("descripcion","") or "—",
+            _fmt_monto_pdf(monto),
+            met.replace("_"," ").capitalize(),
+            p.get("comprobante","") or "—",
+        ])
+
+    items.append(_tabla_reporte(encabezados, filas, col_w))
+    items.append(Spacer(1, 8))
+
+    met_txt = "  |  ".join(
+        f"{m.replace('_',' ').capitalize()}: {_fmt_monto_pdf(v)}"
+        for m, v in sorted(met_tot.items())
+    )
+    items.append(Paragraph(
+        f"TOTAL RECAUDADO: {_fmt_monto_pdf(total)}",
+        ParagraphStyle("tot_ing", fontSize=10, fontName="Helvetica-Bold",
+                       textColor=HexColor("#1B5E20")),
+    ))
+    if met_txt:
+        items.append(Paragraph(
+            met_txt,
+            ParagraphStyle("met_t", fontSize=7.5, textColor=_TEXTO_GRI),
+        ))
+    items += _pie_reporte(hoy, W)
+
+    doc.build(items)
+    return os.path.join(output_dir, nombre)
+
+
+# ── REPORTE DE TRATAMIENTOS ───────────────────────────────────────────────────
+
+def exportar_reporte_tratamientos(datos: list[dict], estado_filtro: str = "",
+                                   output_dir: str | None = None) -> str:
+    output_dir = output_dir or os.path.join(os.path.dirname(__file__), "pdfs")
+    sufijo  = f"_{estado_filtro}" if estado_filtro else "_todos"
+    nombre  = f"Reporte_Tratamientos{sufijo}.pdf"
+    hoy     = datetime.today().strftime("%d/%m/%Y  %H:%M")
+    subtitulo = f"Estado: {estado_filtro.capitalize()}" if estado_filtro else "Todos los estados"
+
+    doc, items, W, st = _doc_reporte(
+        nombre, "Reporte de Tratamientos", subtitulo, output_dir,
+    )
+
+    resumen: dict[str, dict] = {"presupuestado":{"n":0,"total":0},
+                                 "aprobado":{"n":0,"total":0},
+                                 "realizado":{"n":0,"total":0}}
+    for t in datos:
+        est = t.get("estado","")
+        if est in resumen:
+            resumen[est]["n"]     += 1
+            resumen[est]["total"] += float(t.get("costo", 0))
+
+    etiq = {"presupuestado":"Presupuestados","aprobado":"Aprobados","realizado":"Realizados"}
+    res_data = [
+        [etiq.get(e, e), str(v["n"]), _fmt_monto_pdf(v["total"])]
+        for e, v in resumen.items()
+    ]
+    items.append(Paragraph("RESUMEN POR ESTADO", ParagraphStyle(
+        "sec_h", fontSize=9, fontName="Helvetica-Bold",
+        textColor=_AZUL_OSC, spaceBefore=2, spaceAfter=4)))
+    items.append(_tabla_reporte(
+        ["Estado","Cantidad","Total"],
+        res_data,
+        [W*0.4, W*0.2, W*0.4],
+    ))
+    items.append(Spacer(1, 10))
+
+    encabezados = ["Fecha","Paciente","Descripción","Diente","Especialista","Costo","Estado"]
+    col_w = [W*0.09, W*0.18, W*0.24, W*0.06, W*0.18, W*0.12, W*0.13]
+    filas = []
+    for t in datos:
+        pac = (t.get("pacientes") or {})
+        esp = (t.get("especialistas") or {})
+        nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
+        nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
+        filas.append([
+            _fmt_fecha_pdf(t.get("fecha","")),
+            nom_pac or "—",
+            t.get("descripcion","") or "—",
+            str(t.get("diente","")) if t.get("diente") else "—",
+            nom_esp or "—",
+            _fmt_monto_pdf(t.get("costo",0)),
+            (t.get("estado","")).capitalize(),
+        ])
+
+    items.append(Paragraph("DETALLE DE TRATAMIENTOS", ParagraphStyle(
+        "sec_h2", fontSize=9, fontName="Helvetica-Bold",
+        textColor=_AZUL_OSC, spaceBefore=2, spaceAfter=4)))
+    items.append(_tabla_reporte(encabezados, filas, col_w))
+    items.append(Spacer(1, 6))
+    gran_total = sum(float(t.get("costo",0)) for t in datos)
+    items.append(Paragraph(
+        f"TOTAL GENERAL: {_fmt_monto_pdf(gran_total)}  ({len(datos)} tratamientos)",
+        ParagraphStyle("tot_tr", fontSize=9, fontName="Helvetica-Bold",
+                       textColor=_AZUL_OSC),
+    ))
+    items += _pie_reporte(hoy, W)
+
+    doc.build(items)
+    return os.path.join(output_dir, nombre)

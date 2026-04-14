@@ -545,6 +545,97 @@ def cambiar_password_usuario(usuario_id: str, nueva_password: str):
     ).eq("id", usuario_id).execute()
 
 
+# ── REPORTES ──────────────────────────────────────────────────────────────
+
+def listar_citas_rango(fecha_desde: str | None = None,
+                       fecha_hasta: str | None = None,
+                       especialista_id: str | None = None) -> list[dict]:
+    """Devuelve todas las citas en un rango de fechas (formato ISO: YYYY-MM-DD)."""
+    q = get_client().table("citas").select(
+        "*, pacientes(nombre, apellido), especialistas(nombre, apellido)"
+    )
+    if fecha_desde:
+        q = q.gte("fecha_hora", f"{fecha_desde}T00:00:00")
+    if fecha_hasta:
+        q = q.lte("fecha_hora", f"{fecha_hasta}T23:59:59")
+    if especialista_id:
+        q = q.eq("especialista_id", especialista_id)
+    return q.order("fecha_hora", desc=True).execute().data
+
+
+def listar_pagos_todos(fecha_desde: str | None = None,
+                       fecha_hasta: str | None = None,
+                       metodo: str | None = None) -> list[dict]:
+    """Devuelve todos los pagos de todos los pacientes en el rango de fechas."""
+    q = get_client().table("pagos").select(
+        "*, pacientes(nombre, apellido), tratamientos(descripcion)"
+    )
+    if fecha_desde:
+        q = q.gte("fecha", f"{fecha_desde}T00:00:00")
+    if fecha_hasta:
+        q = q.lte("fecha", f"{fecha_hasta}T23:59:59")
+    if metodo:
+        q = q.eq("metodo", metodo)
+    return q.order("fecha", desc=True).execute().data
+
+
+def listar_tratamientos_todos(estado: str | None = None) -> list[dict]:
+    """Devuelve todos los tratamientos de todos los pacientes."""
+    q = get_client().table("tratamientos").select(
+        "*, pacientes(nombre, apellido), especialistas(nombre, apellido)"
+    )
+    if estado:
+        q = q.eq("estado", estado)
+    return q.order("fecha", desc=True).execute().data
+
+
+def stats_resumen() -> dict:
+    """
+    Calcula estadísticas de resumen para el dashboard.
+    Devuelve un dict con conteos y totales del mes actual.
+    """
+    from datetime import datetime, date
+    hoy    = date.today()
+    inicio = hoy.replace(day=1).isoformat()
+    fin    = hoy.isoformat()
+
+    c = get_client()
+
+    pacientes   = c.table("pacientes").select("id", count="exact").execute()
+    citas_mes   = c.table("citas").select("id,estado", count="exact").gte(
+        "fecha_hora", f"{inicio}T00:00:00"
+    ).lte("fecha_hora", f"{fin}T23:59:59").execute()
+    pagos_mes   = c.table("pagos").select("monto").gte(
+        "fecha", f"{inicio}T00:00:00"
+    ).lte("fecha", f"{fin}T23:59:59").execute()
+    trat_pend   = c.table("tratamientos").select("id", count="exact").in_(
+        "estado", ["presupuestado", "aprobado"]
+    ).execute()
+    citas_hoy   = c.table("citas").select("id,estado", count="exact").gte(
+        "fecha_hora", f"{hoy.isoformat()}T00:00:00"
+    ).lte("fecha_hora", f"{hoy.isoformat()}T23:59:59").execute()
+
+    citas_data  = citas_mes.data or []
+    estados     = {}
+    for cita in citas_data:
+        est = cita.get("estado", "pendiente")
+        estados[est] = estados.get(est, 0) + 1
+
+    ingresos_mes = sum(float(p.get("monto", 0)) for p in (pagos_mes.data or []))
+
+    return {
+        "total_pacientes":   pacientes.count or 0,
+        "citas_hoy":         len(citas_hoy.data or []),
+        "citas_mes":         len(citas_data),
+        "citas_realizadas":  estados.get("realizada", 0),
+        "citas_canceladas":  estados.get("cancelada", 0),
+        "citas_pendientes":  estados.get("pendiente", 0) + estados.get("confirmada", 0),
+        "ingresos_mes":      ingresos_mes,
+        "tratamientos_pend": trat_pend.count or 0,
+        "mes_nombre":        datetime.today().strftime("%B %Y"),
+    }
+
+
 # ── SALDO ─────────────────────────────────────────────────────────────────
 
 def saldo_pendiente(paciente_id: str) -> float:
