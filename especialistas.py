@@ -371,7 +371,7 @@ class CalendarioDisponibilidad(ft.Column):
                 width=ANCHO_DIA,
                 height=38,
                 bgcolor="#E3F2FD" if d == hoy else "#FAFAFA",
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
                 border=ft.border.only(
                     left=ft.BorderSide(1, "#E0E0E0"),
                     bottom=ft.BorderSide(2, "#BDBDBD"),
@@ -387,7 +387,7 @@ class CalendarioDisponibilidad(ft.Column):
             etiq = ft.Container(
                 content=ft.Text(f"{hora:02d}:00", size=10, color="#9E9E9E"),
                 width=ANCHO_HORA, height=ALTO_CELDA,
-                alignment=ft.alignment.top_right,
+                alignment=ft.Alignment(1, -1),
                 padding=ft.padding.only(right=6, top=2),
             )
             celdas = [
@@ -427,7 +427,7 @@ class CalendarioDisponibilidad(ft.Column):
                 content=ft.Text(d, size=11, color="#757575",
                                 weight=ft.FontWeight.W_500),
                 expand=True, height=26,
-                alignment=ft.alignment.center,
+                alignment=ft.Alignment(0, 0),
             )
             for d in DIAS_CORTOS
         ], spacing=0)
@@ -468,7 +468,7 @@ class CalendarioDisponibilidad(ft.Column):
                                     else ft.FontWeight.NORMAL),
                     expand=True, height=56,
                     bgcolor=bg,
-                    alignment=ft.alignment.top_center,
+                    alignment=ft.Alignment(0, -1),
                     padding=ft.padding.only(top=4),
                     border=ft.border.all(0.5, "#E0E0E0"),
                 ))
