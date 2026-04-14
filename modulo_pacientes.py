@@ -1123,7 +1123,7 @@ class PacientesView(ft.Column):
 
         # Botón exportar PDF (visible solo cuando hay paciente seleccionado)
         self._btn_exportar = ft.ElevatedButton(
-            text="Exportar HC",
+            "Exportar HC",
             icon=ft.Icons.PICTURE_AS_PDF,
             on_click=self._exportar_pdf,
             visible=False,

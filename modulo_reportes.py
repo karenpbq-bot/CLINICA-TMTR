@@ -144,14 +144,14 @@ def _sin_datos() -> ft.Container:
 
 def _btn_azul(texto: str, icono: str, on_click) -> ft.ElevatedButton:
     return ft.ElevatedButton(
-        text=texto, icon=icono, on_click=on_click,
+        texto, icon=icono, on_click=on_click,
         style=ft.ButtonStyle(bgcolor=_AZUL, color=ft.Colors.WHITE),
     )
 
 
 def _btn_rojo(texto: str, on_click) -> ft.ElevatedButton:
     return ft.ElevatedButton(
-        text=texto, icon=ft.Icons.DESCRIPTION, on_click=on_click,
+        texto, icon=ft.Icons.DESCRIPTION, on_click=on_click,
         style=ft.ButtonStyle(bgcolor=ft.Colors.RED_800,
                               color=ft.Colors.WHITE),
     )
@@ -205,7 +205,7 @@ class _HistoriaClinicaTab(ft.Column):
         )
         self._info_area = ft.Container(expand=True)
         self._btn_word  = ft.ElevatedButton(
-            text="Generar Word (.docx)",
+            "Generar Word (.docx)",
             icon=ft.Icons.ARTICLE,
             on_click=self._exportar,
             visible=False,
@@ -445,7 +445,7 @@ class _PresupuestosTab(ft.Column):
                     _btn_azul("Aplicar filtros", ft.Icons.FILTER_ALT,
                                lambda _: self._cargar()),
                     ft.ElevatedButton(
-                        text="Exportar Excel (.xlsx)",
+                        "Exportar Excel (.xlsx)",
                         icon=ft.Icons.TABLE_CHART,
                         on_click=self._exportar,
                         style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
@@ -659,7 +659,7 @@ class _AgendaTab(ft.Column):
                 _btn_azul("Ver cronograma", ft.Icons.CALENDAR_VIEW_WEEK,
                            lambda _: self._cargar()),
                 ft.ElevatedButton(
-                    text="Exportar Excel (.xlsx)",
+                    "Exportar Excel (.xlsx)",
                     icon=ft.Icons.TABLE_CHART,
                     on_click=self._exportar,
                     style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
@@ -863,12 +863,11 @@ class ReportesView(ft.Column):
         for i, (lbl, icn, _cls) in enumerate(_TABS):
             idx = i
             btn = ft.ElevatedButton(
-                text=lbl, icon=icn,
+                lbl, icon=icn,
                 on_click=lambda _, x=idx: self._sel(x),
                 style=ft.ButtonStyle(
                     bgcolor=_AZUL if i == 0 else ft.Colors.WHITE,
                     color=ft.Colors.WHITE if i == 0 else "#212121",
-                    side=ft.BorderSide(1, _BORDE),
                 ),
             )
             self._tab_btns.append(btn)
@@ -895,7 +894,6 @@ class ReportesView(ft.Column):
             btn.style = ft.ButtonStyle(
                 bgcolor=_AZUL if i == idx else ft.Colors.WHITE,
                 color=ft.Colors.WHITE if i == idx else "#212121",
-                side=ft.BorderSide(1, _BORDE),
             )
             if btn.page:
                 btn.update()
