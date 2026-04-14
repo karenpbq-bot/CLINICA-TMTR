@@ -263,6 +263,21 @@ class CalendarioPicker(ft.Column):
             spacing=0,
         )
 
+    def _cita_en(self, dia: date, hora: int) -> dict | None:
+        """Devuelve la cita que ocupa (dia, hora), o None si el slot está libre."""
+        for c in self._citas:
+            cdt = self._parsear_fh(c.get("fecha_hora", ""))
+            if cdt is None:
+                continue
+            try:
+                dur   = int(c.get("duracion_min", 30))
+                h_fin = cdt.hour + (cdt.minute + dur + 59) // 60
+                if cdt.date() == dia and cdt.hour <= hora < max(cdt.hour + 1, h_fin):
+                    return c
+            except Exception:
+                pass
+        return None
+
     def _make_click(self, dia: date, hora: int):
         def handler(e):
             self._sel = (dia, hora)
@@ -270,7 +285,7 @@ class CalendarioPicker(ft.Column):
             if self.page:
                 self.update()
             if self.on_pick:
-                self.on_pick(dia, hora)
+                self.on_pick(dia, hora, self._cita_en(dia, hora))
         return handler
 
 
@@ -283,14 +298,15 @@ class FormularioCita(ft.Row):
     - Derecha:   calendario interactivo del especialista (clic → llena fecha/hora)
     """
 
-    def __init__(self, cita: dict, on_guardar=None, snack_fn=None):
+    def __init__(self, cita: dict, on_guardar=None, snack_fn=None, on_editar_cita=None):
         super().__init__(
             expand=True, spacing=0,
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
-        self.cita       = cita
-        self.on_guardar = on_guardar
-        self.snack_fn   = snack_fn
+        self.cita           = cita
+        self.on_guardar     = on_guardar
+        self.snack_fn       = snack_fn
+        self.on_editar_cita = on_editar_cita   # callback(cita_dict) para abrir otra cita
         self._construir()
 
     def _construir(self):
@@ -475,8 +491,16 @@ class FormularioCita(ft.Row):
         if self._lbl_cal.page:
             self._lbl_cal.update()
 
-    def _on_slot_seleccionado(self, dia: date, hora: int):
-        """El usuario hizo clic en una celda del calendario."""
+    def _on_slot_seleccionado(self, dia: date, hora: int, cita_existente: dict | None = None):
+        """El usuario hizo clic en una celda del calendario.
+
+        - Si la celda tiene una cita existente → abre esa cita para editar.
+        - Si está libre → pre-llena fecha/hora para nueva cita.
+        """
+        if cita_existente and self.on_editar_cita:
+            self.on_editar_cita(cita_existente)
+            return
+        # Slot libre: pre-llenar fecha y hora en el formulario actual
         self.tf_fecha.value = f"{dia.day:02d}/{dia.month:02d}/{dia.year}"
         self.tf_hora.value  = f"{hora:02d}:00"
         if self.tf_fecha.page:
@@ -679,6 +703,7 @@ class AgendaView(ft.Row):
                 cita,
                 on_guardar=self._refrescar,
                 snack_fn=self._snack,
+                on_editar_cita=self._seleccionar,   # clic en celda ocupada → edita esa cita
             )
         ]
         if self._detalle_col.page:
