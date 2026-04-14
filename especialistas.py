@@ -681,7 +681,7 @@ class EspecialistasView(ft.Row):
                 ft.Divider(height=4),
                 self._lista_col,
             ], spacing=8, expand=True),
-            width=270, padding=12,
+            width=200, padding=10,
             border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
         )
         panel_der = ft.Container(
