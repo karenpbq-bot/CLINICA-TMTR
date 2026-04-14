@@ -22,6 +22,9 @@ def _verificar_credenciales(usuario: str, password: str) -> dict | None:
     2. Si no lo encuentra, comprueba el admin de emergencia de las variables de entorno.
     Devuelve un dict {usuario, nombre, rol} o None si las credenciales son inválidas.
     """
+    usuario  = usuario.strip()
+    password = password.strip()
+
     # ── Paso 1: tabla usuarios en Supabase ────────────────────────────────
     try:
         resultado = verificar_login(usuario, password)

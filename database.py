@@ -483,7 +483,7 @@ def verificar_login(usuario: str, password: str) -> dict | None:
         get_client()
         .table("usuarios")
         .select("id,usuario,nombre,rol,activo,password_hash")
-        .eq("usuario", usuario)
+        .ilike("usuario", usuario.strip())
         .limit(1)
         .execute()
         .data
