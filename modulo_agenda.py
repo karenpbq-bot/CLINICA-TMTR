@@ -390,14 +390,15 @@ class FormularioCita(ft.Row):
             "Nueva Cita" if not self.cita.get("id") else "Editar Cita",
             size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900,
         )
-        btns = ft.Row([
-            ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
+        btns = ft.Column([
+            ft.FilledButton("Guardar", icon=ft.Icons.SAVE,
+                            on_click=self._guardar, width=220),
             ft.OutlinedButton(
                 "Cancelar cita", icon=ft.Icons.CANCEL,
-                on_click=self._cancelar,
+                on_click=self._cancelar, width=220,
                 visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
             ),
-        ], spacing=8, wrap=False)
+        ], spacing=6)
 
         panel_izq = ft.Container(
             content=ft.Column(
@@ -406,16 +407,20 @@ class FormularioCita(ft.Row):
                     ft.Divider(height=4),
                     self.dd_paciente,
                     self.dd_especialista,
-                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
+                    # Margen superior para que la etiqueta flotante no tape el dropdown
+                    ft.Container(
+                        content=ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
+                        margin=ft.margin.only(top=10),
+                    ),
                     ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
                     self.tf_motivo,
                     self.tf_notas,
                     btns,
                 ],
-                spacing=6,
+                spacing=8,
                 scroll=ft.ScrollMode.AUTO,
             ),
-            width=268,
+            width=258,
             padding=ft.padding.only(right=10),
             border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
