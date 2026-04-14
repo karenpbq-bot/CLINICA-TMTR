@@ -658,7 +658,7 @@ class _FichaView(ft.ListView):
 
                 _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
                 ft.Row([self.tf_telefono, self.tf_email], spacing=10),
-                self.tf_direccion,
+                ft.Row([self.tf_direccion], spacing=0),
             ],
             spacing=8, expand=True,
         )
