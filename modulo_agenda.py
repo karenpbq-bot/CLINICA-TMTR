@@ -208,7 +208,6 @@ class CalendarioPicker(ft.Column):
         )
         dias = [(desde + timedelta(days=i)) for i in range((hasta - desde).days)]
         self._grid_wrap.content = self._grilla(dias)
-        self._grid_wrap.height  = 480
 
     def _grilla(self, dias: list[date]) -> ft.Control:
         hoy = date.today()
@@ -232,7 +231,7 @@ class CalendarioPicker(ft.Column):
             )
             for d in dias
         ]
-        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0, expand=True)
+        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0)
 
         # ── filas horarias ─────────────────────────────────────────────
         filas = []
@@ -254,17 +253,14 @@ class CalendarioPicker(ft.Column):
                     on_click=self._make_click(d, hora),
                 )
                 celdas.append(celda)
-            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0, expand=True))
+            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0))
 
         return ft.Column(
             controls=[
                 header,
-                ft.Column(
-                    controls=filas, spacing=0,
-                    scroll=ft.ScrollMode.AUTO, expand=True,
-                ),
+                ft.Column(controls=filas, spacing=0),
             ],
-            spacing=0, expand=True,
+            spacing=0,
         )
 
     def _make_click(self, dia: date, hora: int):
