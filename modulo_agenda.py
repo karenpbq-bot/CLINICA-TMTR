@@ -342,7 +342,7 @@ class FormularioCita(ft.Row):
             value=_fecha_display,
             hint_text="ej. 22/04/2026",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=158,
+            width=150,
             text_size=12,
             dense=True,
         )
@@ -351,7 +351,7 @@ class FormularioCita(ft.Row):
             value=_hora_val,
             hint_text="15:30",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=92,
+            width=84,
             text_size=12,
             dense=True,
         )
@@ -359,7 +359,7 @@ class FormularioCita(ft.Row):
             label="Duración",
             value=str(self.cita.get("duracion_min", 30)),
             options=[ft.dropdown.Option(str(m), f"{m} min") for m in [15, 30, 45, 60, 90]],
-            width=120,
+            width=112,
             text_size=12,
             dense=True,
         )
@@ -367,7 +367,7 @@ class FormularioCita(ft.Row):
             label="Estado",
             value=self.cita.get("estado", "pendiente"),
             options=[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
-            width=136,
+            width=128,
             text_size=12,
             dense=True,
         )
@@ -406,8 +406,8 @@ class FormularioCita(ft.Row):
                     ft.Divider(height=4),
                     self.dd_paciente,
                     self.dd_especialista,
-                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8, tight=True),
-                    ft.Row([self.dd_duracion, self.dd_estado], spacing=8, tight=True),
+                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
+                    ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
                     self.tf_motivo,
                     self.tf_notas,
                     btns,
