@@ -412,13 +412,25 @@ class CalendarioDisponibilidad(ft.Column):
 
     # ── colores ────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _parsear_fh(fh: str) -> datetime | None:
+        """Parsea fecha_hora en cualquier formato ISO devuelto por Supabase.
+        Soporta '2026-04-22 15:30', '2026-04-22T15:30', '2026-04-22T15:30:00+00:00'.
+        """
+        s = str(fh)[:16].replace("T", " ")
+        try:
+            return datetime.strptime(s, "%Y-%m-%d %H:%M")
+        except Exception:
+            return None
+
     def _color_celda(self, dia: date, hora: int) -> str:
         dia_sem = dia.weekday()
         # 1. Cita programada (naranja, prioridad alta)
         for c in self._citas:
-            fh = str(c.get("fecha_hora", ""))
+            cdt = self._parsear_fh(c.get("fecha_hora", ""))
+            if cdt is None:
+                continue
             try:
-                cdt = datetime.strptime(fh[:16], "%Y-%m-%d %H:%M")
                 dur = int(c.get("duracion_min", 30))
                 c_h_fin = cdt.hour + (cdt.minute + dur + 59) // 60
                 if cdt.date() == dia and cdt.hour <= hora < max(cdt.hour + 1, c_h_fin):
