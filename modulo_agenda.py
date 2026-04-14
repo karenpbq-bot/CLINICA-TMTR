@@ -320,7 +320,6 @@ class FormularioCita(ft.Row):
         self.dd_paciente = ft.Dropdown(
             label="Paciente *",
             value=self.cita.get("paciente_id"),
-            width=220,
             options=[
                 ft.dropdown.Option(p["id"], f"{p.get('apellido','')}, {p.get('nombre','')}")
                 for p in pacientes
@@ -329,7 +328,6 @@ class FormularioCita(ft.Row):
         self.dd_especialista = ft.Dropdown(
             label="Especialista",
             value=self.cita.get("especialista_id"),
-            width=220,
             options=[
                 ft.dropdown.Option(
                     e["id"],
