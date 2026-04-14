@@ -476,7 +476,7 @@ class CalendarioDisponibilidad(ft.Column):
                     ft.Text(str(d.day), size=14, weight=ft.FontWeight.W_600,
                             color="#1565C0" if d == hoy else "#212121"),
                 ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                width=ANCHO_DIA,
+                expand=True,
                 height=38,
                 bgcolor="#E3F2FD" if d == hoy else "#FAFAFA",
                 alignment=ft.Alignment(0, 0),
@@ -487,7 +487,7 @@ class CalendarioDisponibilidad(ft.Column):
             )
             for d in dias
         ]
-        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0)
+        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0, expand=True)
 
         # ── filas horarias ────────────────────────────────────────────────
         filas = []
@@ -500,7 +500,7 @@ class CalendarioDisponibilidad(ft.Column):
             )
             celdas = [
                 ft.Container(
-                    width=ANCHO_DIA,
+                    expand=True,
                     height=ALTO_CELDA,
                     bgcolor=self._color_celda(d, hora),
                     border=ft.border.all(0.5, "#E0E0E0"),
@@ -508,7 +508,7 @@ class CalendarioDisponibilidad(ft.Column):
                 )
                 for d in dias
             ]
-            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0))
+            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0, expand=True))
 
         return ft.Column(
             controls=[
