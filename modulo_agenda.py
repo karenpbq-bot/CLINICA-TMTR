@@ -32,8 +32,8 @@ MESES_ES    = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov"
 
 H_INI_CAL  = 7
 H_FIN_CAL  = 20
-ALTO_CELDA = 22
-ANCHO_HORA = 46
+ALTO_CELDA = 18
+ANCHO_HORA = 42
 
 COLOR_DISP   = "#FFF9C4"   # amarillo claro – disponibilidad
 COLOR_CITA   = "#FFB74D"   # naranja – cita ya programada
@@ -213,15 +213,15 @@ class CalendarioPicker(ft.Column):
         hoy = date.today()
 
         # ── cabecera ──────────────────────────────────────────────────
-        cab_hora = ft.Container(width=ANCHO_HORA, height=34)
+        cab_hora = ft.Container(width=ANCHO_HORA, height=28)
         celdas_cab = [
             ft.Container(
                 content=ft.Column([
-                    ft.Text(DIAS_CORTOS[d.weekday()], size=9, color="#757575"),
-                    ft.Text(str(d.day), size=13, weight=ft.FontWeight.W_600,
+                    ft.Text(DIAS_CORTOS[d.weekday()], size=8, color="#757575"),
+                    ft.Text(str(d.day), size=12, weight=ft.FontWeight.W_600,
                             color="#1565C0" if d == hoy else "#212121"),
                 ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                expand=True, height=34,
+                expand=True, height=28,
                 bgcolor=COLOR_HOY if d == hoy else "#FAFAFA",
                 alignment=ft.Alignment(0, 0),
                 border=ft.border.only(
@@ -438,7 +438,7 @@ class FormularioCita(ft.Row):
                 spacing=6, expand=True,
             ),
             expand=True,
-            padding=ft.padding.only(left=12),
+            padding=ft.padding.only(left=12, right=14),
         )
 
         self.controls = [panel_izq, panel_der]
