@@ -623,44 +623,52 @@ class _FichaView(ft.ListView):
 
         lbl_btn = "Actualizar ficha" if self.paciente_id else "Crear paciente"
 
-        self.controls = [
-            # Botón siempre visible al inicio del formulario
+        btn_guardar_top = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.PERSON_ADD if not self.paciente_id else ft.Icons.EDIT,
+                        size=18, color=ft.Colors.WHITE),
+                ft.Text(lbl_btn, size=13, color=ft.Colors.WHITE,
+                        weight=ft.FontWeight.W_500),
+            ], spacing=8, tight=True),
+            bgcolor=ft.Colors.BLUE_700, border_radius=8,
+            padding=ft.Padding.symmetric(vertical=10, horizontal=20),
+            on_click=self._guardar, ink=True,
+        )
+
+        esp_panel = (
+            _EspecialistasPanel(self.paciente_id, self.snack_fn)
+            if self.paciente_id else
             ft.Container(
-                content=ft.Row(controls=[
-                    ft.Icon(ft.Icons.PERSON_ADD if not self.paciente_id else ft.Icons.EDIT,
-                            size=18, color=ft.Colors.WHITE),
-                    ft.Text(lbl_btn, size=13, color=ft.Colors.WHITE,
-                            weight=ft.FontWeight.W_500),
-                ], spacing=8, tight=True),
-                bgcolor=ft.Colors.BLUE_700,
-                border_radius=8,
-                padding=ft.Padding.symmetric(vertical=10, horizontal=20),
-                on_click=self._guardar,
-                ink=True,
-            ),
+                content=ft.Text(
+                    "Guardá la ficha primero para asignar especialistas.",
+                    size=12, color="#9E9E9E", italic=True,
+                ),
+                padding=ft.Padding.symmetric(vertical=4, horizontal=2),
+            )
+        )
+
+        self.controls = [
+            btn_guardar_top,
             ft.Divider(height=8, color=ft.Colors.TRANSPARENT),
+
             _titulo("DATOS PERSONALES", ft.Icons.PERSON),
-            ft.Row(controls=[self.tf_nombre, self.tf_apellido], spacing=10),
-            ft.Row(controls=[self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10, wrap=True),
+            ft.Row([self.tf_nombre, self.tf_apellido], spacing=10),
+
+            ft.Row([self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10),
+
             _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
-            ft.Row(controls=[self.tf_telefono, self.tf_email], spacing=10),
+            ft.Row([self.tf_telefono, self.tf_email], spacing=10),
             self.tf_direccion,
+
             _titulo("COBERTURA MÉDICA", ft.Icons.HEALTH_AND_SAFETY),
-            ft.Row(controls=[self.tf_obra, self.tf_afiliado], spacing=10),
+            ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
+
             _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
             self.tf_alergias,
+
             _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
-            (
-                _EspecialistasPanel(self.paciente_id, self.snack_fn)
-                if self.paciente_id else
-                ft.Container(
-                    content=ft.Text(
-                        "Guardá la ficha primero para asignar especialistas.",
-                        size=12, color="#9E9E9E", italic=True,
-                    ),
-                    padding=ft.Padding.symmetric(vertical=4, horizontal=2),
-                )
-            ),
+            esp_panel,
+
             ft.Container(
                 content=ft.FilledButton(lbl_btn, icon=ft.Icons.SAVE,
                                         on_click=self._guardar),
