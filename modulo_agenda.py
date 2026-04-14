@@ -342,24 +342,34 @@ class FormularioCita(ft.Row):
             value=_fecha_display,
             hint_text="ej. 22/04/2026",
             keyboard_type=ft.KeyboardType.DATETIME,
-            read_only=False,
+            width=158,
+            text_size=12,
+            dense=True,
         )
         self.tf_hora = ft.TextField(
             label="Hora (HH:MM) *",
             value=_hora_val,
-            hint_text="ej. 15:30",
+            hint_text="15:30",
             keyboard_type=ft.KeyboardType.DATETIME,
-            read_only=False,
+            width=92,
+            text_size=12,
+            dense=True,
         )
         self.dd_duracion = ft.Dropdown(
             label="Duración",
             value=str(self.cita.get("duracion_min", 30)),
             options=[ft.dropdown.Option(str(m), f"{m} min") for m in [15, 30, 45, 60, 90]],
+            width=120,
+            text_size=12,
+            dense=True,
         )
         self.dd_estado = ft.Dropdown(
             label="Estado",
             value=self.cita.get("estado", "pendiente"),
             options=[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
+            width=136,
+            text_size=12,
+            dense=True,
         )
         self.tf_motivo = ft.TextField(
             label="Motivo",
@@ -396,18 +406,19 @@ class FormularioCita(ft.Row):
                     ft.Divider(height=4),
                     self.dd_paciente,
                     self.dd_especialista,
-                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
-                    ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
+                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8, tight=True),
+                    ft.Row([self.dd_duracion, self.dd_estado], spacing=8, tight=True),
                     self.tf_motivo,
                     self.tf_notas,
                     btns,
                 ],
-                spacing=8,
+                spacing=6,
                 scroll=ft.ScrollMode.AUTO,
             ),
-            width=280,
-            padding=ft.padding.only(right=12),
+            width=268,
+            padding=ft.padding.only(right=10),
             border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
 
         # ── Panel derecho (calendario) ────────────────────────────────────
