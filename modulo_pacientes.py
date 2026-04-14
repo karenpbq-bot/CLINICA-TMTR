@@ -994,7 +994,6 @@ OdontogramaDiagnosticoView = OdontogramaView
 _TABS_HISTORIA = [
     ("Ficha",        ft.Icons.PERSON),
     ("Anamnesis",    ft.Icons.HEALTH_AND_SAFETY),
-    ("Exploración",  ft.Icons.NOTES),
     ("Odontograma",  ft.Icons.MEDICAL_SERVICES),
 ]
 
@@ -1021,7 +1020,7 @@ class PacientesView(ft.Column):
         super().__init__(spacing=0, expand=True)
         self.paciente_id: str | None = None
         self._tab_main   = 0   # 0=Nuevo Paciente  1=Historia Clínica
-        self._tab_hist   = 0   # 0=Ficha 1=Anamnesis 2=Exploración 3=Odontograma
+        self._tab_hist   = 0   # 0=Ficha 1=Anamnesis 2=Odontograma
 
         # ── barras de pestañas (se reconstruyen en _construir) ──────────
         self._btn_nuevo    = None
@@ -1245,8 +1244,6 @@ class PacientesView(ft.Column):
             contenido = _FichaView(pid, snack, on_creado=self._on_paciente_creado)
         elif self._tab_hist == 1:
             contenido = _AnamnesisView(pid, snack)
-        elif self._tab_hist == 2:
-            contenido = _ExploracionView(pid, snack)
         else:
             try:
                 h  = obtener_historia_clinica(pid) or {}
