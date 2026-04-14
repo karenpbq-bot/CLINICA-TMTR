@@ -1122,19 +1122,16 @@ class PacientesView(ft.Column):
         )
 
         # Botón exportar PDF (visible solo cuando hay paciente seleccionado)
-        self._btn_exportar = ft.Container(
-            content=ft.Row(controls=[
-                ft.Icon(ft.Icons.PICTURE_AS_PDF, size=16, color=ft.Colors.WHITE),
-                ft.Text("Exportar HC", size=12, color=ft.Colors.WHITE,
-                        weight=ft.FontWeight.W_500),
-            ], spacing=6, tight=True),
-            bgcolor="#C62828",
-            border_radius=7,
-            padding=ft.Padding.symmetric(vertical=8, horizontal=14),
+        self._btn_exportar = ft.ElevatedButton(
+            text="Exportar HC",
+            icon=ft.Icons.PICTURE_AS_PDF,
             on_click=self._exportar_pdf,
-            ink=True,
             visible=False,
             tooltip="Exportar Historia Clínica completa en PDF",
+            style=ft.ButtonStyle(
+                bgcolor=ft.Colors.RED_800,
+                color=ft.Colors.WHITE,
+            ),
         )
 
         # Barra de selector (solo visible en tab Historia)
@@ -1331,19 +1328,42 @@ class PacientesView(ft.Column):
         self._mostrar_historia()
 
     def _exportar_pdf(self, e=None):
-        """Genera el PDF de Historia Clínica y lo abre con el visor del sistema."""
+        """Genera el PDF de Historia Clínica y lo guarda en la carpeta pdfs/."""
+        print(f"[PDF] exportar click — paciente_id={self.paciente_id!r}", flush=True)
         if not self.paciente_id:
             self._snack("Seleccioná un paciente primero.", error=True)
             return
         try:
             from generar_pdf import exportar_historia_clinica
-            self._snack("Generando PDF...")
-            ruta = exportar_historia_clinica(self.paciente_id)
-            subprocess.Popen(["xdg-open", ruta],
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL)
-            self._snack(f"PDF generado: {os.path.basename(ruta)}")
+            self._snack("Generando PDF, por favor esperá...")
+            out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfs")
+            ruta    = exportar_historia_clinica(self.paciente_id, output_dir=out_dir)
+            nombre  = os.path.basename(ruta)
+            print(f"[PDF] listo: {ruta}", flush=True)
+            if self.page:
+                dlg = ft.AlertDialog(
+                    title=ft.Text("PDF generado"),
+                    content=ft.Column(controls=[
+                        ft.Text("El archivo fue guardado en:", size=13),
+                        ft.Text(f"pdfs/{nombre}",
+                                size=12, weight=ft.FontWeight.BOLD,
+                                color="#1565C0",
+                                selectable=True),
+                        ft.Text(
+                            "Podés descargarlo desde el explorador de archivos "
+                            "del proyecto (panel izquierdo → carpeta 'pdfs').",
+                            size=12, color="#616161",
+                        ),
+                    ], tight=True, spacing=8),
+                    actions=[
+                        ft.TextButton("Cerrar", on_click=lambda _: self.page.pop_dialog()),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+                self.page.show_dialog(dlg)
         except Exception as ex:
+            import traceback
+            print(f"[PDF] ERROR: {ex}\n{traceback.format_exc()}", flush=True)
             self._snack(f"Error al generar PDF: {ex}", error=True)
 
     def _snack(self, msg: str, error: bool = False):

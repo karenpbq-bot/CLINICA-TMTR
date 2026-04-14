@@ -317,10 +317,11 @@ def _tabla_ficha(datos: list[list], col_widths: list[float]) -> Table:
 #  FUNCIÓN PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def exportar_historia_clinica(paciente_id: str) -> str:
+def exportar_historia_clinica(paciente_id: str, output_dir: str | None = None) -> str:
     """
     Genera el PDF de historia clínica y devuelve la ruta al archivo.
     Lanza excepción si falla.
+    output_dir: carpeta de destino (si es None usa /tmp).
     """
     # ── Obtener datos ─────────────────────────────────────────────────────
     paciente  = obtener_paciente(paciente_id) or {}
@@ -332,9 +333,11 @@ def exportar_historia_clinica(paciente_id: str) -> str:
     fecha_hoy  = datetime.today().strftime("%d/%m/%Y  %H:%M")
 
     # ── Ruta del archivo ──────────────────────────────────────────────────
-    tmp_dir = tempfile.gettempdir()
+    if output_dir is None:
+        output_dir = tempfile.gettempdir()
+    os.makedirs(output_dir, exist_ok=True)
     safe_name = "".join(c if c.isalnum() else "_" for c in nombre_pac)[:40]
-    ruta_pdf  = os.path.join(tmp_dir, f"HC_{safe_name}.pdf")
+    ruta_pdf  = os.path.join(output_dir, f"HC_{safe_name}.pdf")
 
     # ── Documento ─────────────────────────────────────────────────────────
     margen_h = 18 * mm
