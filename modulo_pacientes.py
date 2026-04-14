@@ -601,14 +601,15 @@ class _FichaView(ft.ListView):
                 self._datos = {}
 
         d = self._datos
-        self.tf_nombre    = _tf("Nombre *", d.get("nombre",""), expand=True)
-        self.tf_apellido  = _tf("Apellido *", d.get("apellido",""), expand=True)
+        # Nombre y Apellido van apilados en columna → sin expand horizontal
+        self.tf_nombre    = _tf("Nombre *",    d.get("nombre",""))
+        self.tf_apellido  = _tf("Apellido *",  d.get("apellido",""))
         self.tf_dni       = _tf("DNI / Cédula", d.get("dni",""), width=180)
         self.tf_fec_nac   = _tf("Fecha nacimiento", d.get("fecha_nac",""),
                                  width=160, hint="AAAA-MM-DD")
         self.tf_telefono  = _tf("Teléfono", d.get("telefono",""), width=200)
         self.tf_email     = _tf("Correo electrónico", d.get("email",""), expand=True)
-        self.tf_direccion = _tf("Dirección", d.get("direccion",""), expand=True)
+        self.tf_direccion = _tf("Dirección", d.get("direccion",""))
         self.tf_obra      = _tf("Obra social", d.get("obra_social",""), expand=True)
         self.tf_afiliado  = _tf("Nro. afiliado", d.get("nro_afiliado",""), width=180)
         self.dd_sangre    = ft.Dropdown(
@@ -619,7 +620,7 @@ class _FichaView(ft.ListView):
         )
         self.tf_alergias  = _tf("Alergias conocidas",
                                  d.get("alergias",""),
-                                 multiline=True, min_lines=2, expand=True)
+                                 multiline=True, min_lines=3)
 
         lbl_btn = "Actualizar ficha" if self.paciente_id else "Crear paciente"
 
@@ -647,24 +648,44 @@ class _FichaView(ft.ListView):
             )
         )
 
+        # ── Columna izquierda: Datos Personales + Contacto ───────────────
+        col_izq = ft.Column(
+            controls=[
+                _titulo("DATOS PERSONALES", ft.Icons.PERSON),
+                self.tf_nombre,
+                self.tf_apellido,
+                ft.Row([self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10),
+
+                _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
+                ft.Row([self.tf_telefono, self.tf_email], spacing=10),
+                self.tf_direccion,
+            ],
+            spacing=8, expand=True,
+        )
+
+        # ── Columna derecha: Cobertura médica + Alergias ──────────────
+        col_der = ft.Column(
+            controls=[
+                _titulo("COBERTURA MÉDICA", ft.Icons.HEALTH_AND_SAFETY),
+                ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
+
+                _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
+                self.tf_alergias,
+            ],
+            spacing=8, expand=True,
+        )
+
         self.controls = [
             btn_guardar_top,
             ft.Divider(height=8, color=ft.Colors.TRANSPARENT),
 
-            _titulo("DATOS PERSONALES", ft.Icons.PERSON),
-            ft.Row([self.tf_nombre, self.tf_apellido], spacing=10),
-
-            ft.Row([self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10),
-
-            _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
-            ft.Row([self.tf_telefono, self.tf_email], spacing=10),
-            self.tf_direccion,
-
-            _titulo("COBERTURA MÉDICA", ft.Icons.HEALTH_AND_SAFETY),
-            ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
-
-            _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
-            self.tf_alergias,
+            # Dos columnas al mismo nivel
+            ft.Row(
+                controls=[col_izq, ft.VerticalDivider(width=1, color="#E0E0E0"), col_der],
+                spacing=16,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+                expand=False,
+            ),
 
             _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
             esp_panel,
