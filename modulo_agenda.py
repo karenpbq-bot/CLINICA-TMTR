@@ -568,24 +568,28 @@ class AgendaView(ft.Row):
                 ft.dropdown.Option("todas", "Todas"),
                 *[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
             ],
-            width=200,
+            width=196,
             on_select=self._aplicar_filtro,
         )
+
+        _BARRA = 220   # ancho de la barra lateral
 
         panel_izq = ft.Container(
             content=ft.Column(
                 controls=[
                     ft.Text("Agenda de Citas", size=16, weight=ft.FontWeight.BOLD),
                     ft.FilledButton("+ Nueva Cita", icon=ft.Icons.ADD,
-                                   on_click=lambda e: self._seleccionar({})),
+                                   on_click=lambda e: self._seleccionar({}),
+                                   width=_BARRA - 24),
                     self._dd_filtro,
                     ft.Divider(height=4),
                     self._lista_col,
                 ],
                 spacing=8, expand=True,
             ),
-            width=300, padding=12,
+            width=_BARRA, padding=ft.padding.all(12),
             border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
+            clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
         panel_der = ft.Container(
             content=self._detalle_col, expand=True, padding=16,
