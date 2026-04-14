@@ -595,25 +595,26 @@ class AgendaView(ft.Row):
         self._lista_col   = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
         self._detalle_col = ft.Column(visible=False, spacing=0)
 
-        # ── Maestro de citas (tabla siempre visible) ──────────────────────
-        self._maestro_rows: list[ft.DataRow] = []
-        self._maestro_tabla = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Paciente",    size=12, weight=ft.FontWeight.W_600)),
-                ft.DataColumn(ft.Text("Especialista",size=12, weight=ft.FontWeight.W_600)),
-                ft.DataColumn(ft.Text("Fecha / Hora",size=12, weight=ft.FontWeight.W_600)),
-                ft.DataColumn(ft.Text("Duración",    size=12, weight=ft.FontWeight.W_600)),
-                ft.DataColumn(ft.Text("Estado",      size=12, weight=ft.FontWeight.W_600)),
-            ],
-            rows=[],
-            column_spacing=16,
-            heading_row_height=36,
-            data_row_min_height=32,
-            data_row_max_height=36,
-            border=ft.border.all(1, "#E0E0E0"),
-            border_radius=6,
-            horizontal_lines=ft.BorderSide(1, "#F5F5F5"),
-        )
+        # ── Maestro de citas (lista siempre visible) ─────────────────────
+        self._maestro_col = ft.Column(spacing=0, scroll=ft.ScrollMode.AUTO, expand=True)
+
+        def _cab_maestro():
+            """Fila de encabezado de la tabla maestro."""
+            def cel(txt, flex):
+                return ft.Container(
+                    content=ft.Text(txt, size=11, weight=ft.FontWeight.W_700,
+                                    color="#424242"),
+                    expand=flex, padding=ft.padding.symmetric(horizontal=6, vertical=4),
+                )
+            return ft.Container(
+                content=ft.Row([
+                    cel("Paciente", 3), cel("Especialista", 3),
+                    cel("Fecha / Hora", 3), cel("Dur.", 1), cel("Estado", 2),
+                ], spacing=0),
+                bgcolor="#ECEFF1",
+                border=ft.border.only(bottom=ft.BorderSide(1, "#B0BEC5")),
+            )
+
         maestro_section = ft.Column(
             controls=[
                 ft.Divider(height=8),
@@ -622,15 +623,10 @@ class AgendaView(ft.Row):
                     ft.Text("Citas registradas", size=14,
                             weight=ft.FontWeight.W_600, color="#1565C0"),
                 ], spacing=6),
-                ft.Container(
-                    content=ft.Column(
-                        [self._maestro_tabla],
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    expand=True,
-                ),
+                _cab_maestro(),
+                self._maestro_col,
             ],
-            spacing=6, expand=True,
+            spacing=4, expand=True,
         )
 
         self._dd_filtro = ft.Dropdown(
@@ -738,53 +734,69 @@ class AgendaView(ft.Row):
             self._lista_col.update()
 
     def _renderizar_maestro(self):
-        """Construye la DataTable con todas las citas ordenadas por fecha."""
+        """Construye la lista maestra de citas ordenadas por fecha."""
         citas_ord = sorted(
             self._todas_citas,
             key=lambda c: str(c.get("fecha_hora", "")),
         )
-        self._maestro_tabla.rows.clear()
-        if not citas_ord:
-            self._maestro_tabla.rows.append(
-                ft.DataRow(cells=[
-                    ft.DataCell(ft.Text("Sin citas registradas.", color="#9E9E9E", size=12)),
-                    ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")),
-                    ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")),
-                ])
+        self._maestro_col.controls.clear()
+
+        def _cel(txt, flex, bold=False):
+            return ft.Container(
+                content=ft.Text(
+                    txt, size=11,
+                    weight=ft.FontWeight.W_500 if bold else ft.FontWeight.NORMAL,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                    no_wrap=True,
+                ),
+                expand=flex,
+                padding=ft.padding.symmetric(horizontal=6, vertical=5),
             )
-        for c in citas_ord:
+
+        if not citas_ord:
+            self._maestro_col.controls.append(
+                ft.Container(
+                    content=ft.Text("Sin citas registradas.", color="#9E9E9E",
+                                    size=12, italic=True),
+                    padding=12,
+                )
+            )
+        for i, c in enumerate(citas_ord):
             pac    = c.get("pacientes") or {}
             esp    = c.get("especialistas") or {}
             estado = c.get("estado", "pendiente")
             fh     = str(c.get("fecha_hora", ""))[:16].replace("T", " ")
             dur    = c.get("duracion_min", "–")
-            self._maestro_tabla.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(
-                            f"{pac.get('apellido','?')}, {pac.get('nombre','?')}",
-                            size=12,
-                        )),
-                        ft.DataCell(ft.Text(
-                            f"Dr/a. {esp.get('apellido','–')}",
-                            size=12,
-                        )),
-                        ft.DataCell(ft.Text(fh, size=12)),
-                        ft.DataCell(ft.Text(f"{dur} min", size=12)),
-                        ft.DataCell(ft.Container(
-                            content=ft.Text(estado.capitalize(), size=11,
-                                            color="#FFFFFF", weight=ft.FontWeight.W_500),
-                            bgcolor=ESTADO_COLOR.get(estado, "#E0E0E0"),
-                            padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                            border_radius=10,
-                        )),
-                    ],
-                    on_select_changed=lambda e, cita=c: self._seleccionar(cita),
-                    color={"hovered": "#E3F2FD"},
+            bg     = "#FFFFFF" if i % 2 == 0 else "#F9FAFB"
+            self._maestro_col.controls.append(
+                ft.Container(
+                    content=ft.Row([
+                        _cel(f"{pac.get('apellido','?')}, {pac.get('nombre','?')}", 3),
+                        _cel(f"Dr/a. {esp.get('apellido','–')}", 3),
+                        _cel(fh, 3),
+                        _cel(f"{dur}′", 1),
+                        ft.Container(
+                            content=ft.Container(
+                                content=ft.Text(estado.capitalize(), size=10,
+                                                color="#FFFFFF",
+                                                weight=ft.FontWeight.W_500),
+                                bgcolor=ESTADO_COLOR.get(estado, "#90A4AE"),
+                                padding=ft.padding.symmetric(horizontal=7, vertical=2),
+                                border_radius=10,
+                            ),
+                            expand=2,
+                            padding=ft.padding.symmetric(horizontal=4, vertical=4),
+                            alignment=ft.Alignment(-1, 0),
+                        ),
+                    ], spacing=0),
+                    bgcolor=bg,
+                    border=ft.border.only(bottom=ft.BorderSide(1, "#EEEEEE")),
+                    on_click=lambda e, cita=c: self._seleccionar(cita),
+                    ink=True,
                 )
             )
-        if self._maestro_tabla.page:
-            self._maestro_tabla.update()
+        if self._maestro_col.page:
+            self._maestro_col.update()
 
     def _seleccionar(self, cita: dict):
         self._detalle_col.visible = True
