@@ -593,7 +593,45 @@ class AgendaView(ft.Row):
         self._filtro_estado = "todas"
 
         self._lista_col   = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
-        self._detalle_col = ft.Column(expand=True, visible=False, spacing=8)
+        self._detalle_col = ft.Column(visible=False, spacing=0)
+
+        # ── Maestro de citas (tabla siempre visible) ──────────────────────
+        self._maestro_rows: list[ft.DataRow] = []
+        self._maestro_tabla = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("Paciente",    size=12, weight=ft.FontWeight.W_600)),
+                ft.DataColumn(ft.Text("Especialista",size=12, weight=ft.FontWeight.W_600)),
+                ft.DataColumn(ft.Text("Fecha / Hora",size=12, weight=ft.FontWeight.W_600)),
+                ft.DataColumn(ft.Text("Duración",    size=12, weight=ft.FontWeight.W_600)),
+                ft.DataColumn(ft.Text("Estado",      size=12, weight=ft.FontWeight.W_600)),
+            ],
+            rows=[],
+            column_spacing=16,
+            heading_row_height=36,
+            data_row_min_height=32,
+            data_row_max_height=36,
+            border=ft.border.all(1, "#E0E0E0"),
+            border_radius=6,
+            horizontal_lines=ft.BorderSide(1, "#F5F5F5"),
+        )
+        maestro_section = ft.Column(
+            controls=[
+                ft.Divider(height=8),
+                ft.Row([
+                    ft.Icon(ft.Icons.LIST_ALT, color="#1565C0", size=18),
+                    ft.Text("Citas registradas", size=14,
+                            weight=ft.FontWeight.W_600, color="#1565C0"),
+                ], spacing=6),
+                ft.Container(
+                    content=ft.Column(
+                        [self._maestro_tabla],
+                        scroll=ft.ScrollMode.AUTO,
+                    ),
+                    expand=True,
+                ),
+            ],
+            spacing=6, expand=True,
+        )
 
         self._dd_filtro = ft.Dropdown(
             label="Filtrar por estado",
@@ -626,7 +664,11 @@ class AgendaView(ft.Row):
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
         )
         panel_der = ft.Container(
-            content=self._detalle_col, expand=True, padding=16,
+            content=ft.Column(
+                controls=[self._detalle_col, maestro_section],
+                spacing=0, expand=True,
+            ),
+            expand=True, padding=16,
         )
         self.controls = [panel_izq, panel_der]
 
@@ -649,6 +691,7 @@ class AgendaView(ft.Row):
             self._snack(f"Error cargando citas: {ex}", error=True)
             self._todas_citas = []
         self._renderizar_lista()
+        self._renderizar_maestro()
 
     def _aplicar_filtro(self, e):
         self._filtro_estado = self._dd_filtro.value or "todas"
@@ -662,7 +705,7 @@ class AgendaView(ft.Row):
         self._lista_col.controls.clear()
         if not filtradas:
             self._lista_col.controls.append(
-                ft.Text("Sin citas para el filtro seleccionado.", color="#9E9E9E", size=12)
+                ft.Text("Sin citas.", color="#9E9E9E", size=12)
             )
         for c in filtradas:
             pac    = c.get("pacientes") or {}
@@ -677,17 +720,15 @@ class AgendaView(ft.Row):
                         ),
                         title=ft.Text(
                             f"{pac.get('apellido','?')}, {pac.get('nombre','?')}",
-                            size=13,
+                            size=12,
                         ),
                         subtitle=ft.Text(
-                            f"{str(c.get('fecha_hora',''))[:16].replace('T',' ')}  ·  "
-                            f"Dr/a. {esp.get('apellido','–')}",
-                            size=11,
+                            f"{str(c.get('fecha_hora',''))[:16].replace('T',' ')}",
+                            size=10,
                         ),
-                        trailing=ft.Text(estado.capitalize(), size=11,
-                                         weight=ft.FontWeight.W_500),
                         on_click=lambda e, cita=c: self._seleccionar(cita),
-                        content_padding=ft.padding.symmetric(horizontal=8),
+                        content_padding=ft.padding.symmetric(horizontal=6),
+                        min_vertical_padding=0,
                     ),
                     bgcolor=ESTADO_COLOR.get(estado, "#F5F5F5"),
                     border_radius=6,
@@ -696,6 +737,55 @@ class AgendaView(ft.Row):
         if self._lista_col.page:
             self._lista_col.update()
 
+    def _renderizar_maestro(self):
+        """Construye la DataTable con todas las citas ordenadas por fecha."""
+        citas_ord = sorted(
+            self._todas_citas,
+            key=lambda c: str(c.get("fecha_hora", "")),
+        )
+        self._maestro_tabla.rows.clear()
+        if not citas_ord:
+            self._maestro_tabla.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text("Sin citas registradas.", color="#9E9E9E", size=12)),
+                    ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")),
+                    ft.DataCell(ft.Text("")), ft.DataCell(ft.Text("")),
+                ])
+            )
+        for c in citas_ord:
+            pac    = c.get("pacientes") or {}
+            esp    = c.get("especialistas") or {}
+            estado = c.get("estado", "pendiente")
+            fh     = str(c.get("fecha_hora", ""))[:16].replace("T", " ")
+            dur    = c.get("duracion_min", "–")
+            self._maestro_tabla.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(
+                            f"{pac.get('apellido','?')}, {pac.get('nombre','?')}",
+                            size=12,
+                        )),
+                        ft.DataCell(ft.Text(
+                            f"Dr/a. {esp.get('apellido','–')}",
+                            size=12,
+                        )),
+                        ft.DataCell(ft.Text(fh, size=12)),
+                        ft.DataCell(ft.Text(f"{dur} min", size=12)),
+                        ft.DataCell(ft.Container(
+                            content=ft.Text(estado.capitalize(), size=11,
+                                            color="#FFFFFF", weight=ft.FontWeight.W_500),
+                            bgcolor=ESTADO_COLOR.get(estado, "#E0E0E0"),
+                            padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                            border_radius=10,
+                        )),
+                    ],
+                    on_select_changed=lambda e, cita=c: self._seleccionar(cita),
+                    color={"hovered": "#E3F2FD"},
+                )
+            )
+        if self._maestro_tabla.page:
+            self._maestro_tabla.update()
+
     def _seleccionar(self, cita: dict):
         self._detalle_col.visible = True
         self._detalle_col.controls = [
@@ -703,14 +793,14 @@ class AgendaView(ft.Row):
                 cita,
                 on_guardar=self._refrescar,
                 snack_fn=self._snack,
-                on_editar_cita=self._seleccionar,   # clic en celda ocupada → edita esa cita
+                on_editar_cita=self._seleccionar,
             )
         ]
         if self._detalle_col.page:
             self._detalle_col.update()
 
     def _refrescar(self):
-        self._cargar()
         self._detalle_col.visible = False
         if self._detalle_col.page:
             self._detalle_col.update()
+        self._cargar()
