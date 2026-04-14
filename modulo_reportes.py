@@ -853,7 +853,7 @@ _TABS = [
 
 class ReportesView(ft.Column):
     def __init__(self):
-        super().__init__(spacing=0, expand=True, padding=0)
+        super().__init__(spacing=0, expand=True)
         self._tab      = 0
         self._area     = ft.Container(expand=True)
         self._tab_btns: list[ft.ElevatedButton] = []

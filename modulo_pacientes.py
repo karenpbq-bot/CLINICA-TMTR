@@ -588,7 +588,7 @@ class _EspecialistasPanel(ft.Column):
 class _FichaView(ft.ListView):
     """Formulario de ficha del paciente en un ListView siempre scrollable."""
     def __init__(self, paciente_id: str | None, snack_fn, on_creado=None):
-        super().__init__(spacing=8, padding=ft.Padding.all(2))
+        super().__init__(spacing=8)
         self.paciente_id = paciente_id
         self.snack_fn    = snack_fn
         self._on_creado  = on_creado   # callback(nuevo_id) tras crear
@@ -738,7 +738,7 @@ class _FichaView(ft.ListView):
 
 class _AnamnesisView(ft.ListView):
     def __init__(self, paciente_id: str, snack_fn):
-        super().__init__(spacing=8, padding=ft.Padding.all(2))
+        super().__init__(spacing=8)
         self.paciente_id  = paciente_id
         self.snack_fn     = snack_fn
         self._historia: dict = {}
@@ -918,7 +918,7 @@ class _AnamnesisView(ft.ListView):
 
 class _ExploracionView(ft.ListView):
     def __init__(self, paciente_id: str, snack_fn):
-        super().__init__(spacing=8, padding=ft.Padding.all(2))
+        super().__init__(spacing=8)
         self.paciente_id = paciente_id
         self.snack_fn    = snack_fn
         self._historia: dict = {}
