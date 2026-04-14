@@ -42,7 +42,7 @@ COLOR_AFUERA = "#F5F5F5"
 # Dimensiones del grid horario
 H_INI_CAL   = 7
 H_FIN_CAL   = 20
-ALTO_CELDA  = 38   # px por hora
+ALTO_CELDA  = 30   # px por hora
 ANCHO_HORA  = 54   # columna de hora
 ANCHO_DIA   = 88   # columna por día
 
@@ -296,7 +296,7 @@ class CalendarioDisponibilidad(ft.Column):
         self._citas: list[dict] = []
 
         self._lbl_periodo = ft.Text("", size=13, weight=ft.FontWeight.W_500, expand=True)
-        self._grid_wrap   = ft.Container(height=540, clip_behavior=ft.ClipBehavior.HARD_EDGE)
+        self._grid_wrap   = ft.Container()
 
         self._btn_sem  = self._mk_btn_vista("1 Semana",  "semana")
         self._btn_2sem = self._mk_btn_vista("2 Semanas", "2semanas")
@@ -467,11 +467,9 @@ class CalendarioDisponibilidad(ft.Column):
 
         if self._vista == "mes":
             self._grid_wrap.content = self._grilla_mes(desde)
-            self._grid_wrap.height  = None
         else:
             dias = [(desde + timedelta(days=i)) for i in range((hasta - desde).days)]
             self._grid_wrap.content = self._grilla_horaria(dias)
-            self._grid_wrap.height  = 540
 
         if self._grid_wrap.page:
             self._grid_wrap.update()
@@ -499,7 +497,7 @@ class CalendarioDisponibilidad(ft.Column):
             )
             for d in dias
         ]
-        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0, expand=True)
+        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0)
 
         # ── filas horarias ────────────────────────────────────────────────
         filas = []
@@ -520,20 +518,14 @@ class CalendarioDisponibilidad(ft.Column):
                 )
                 for d in dias
             ]
-            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0, expand=True))
+            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0))
 
         return ft.Column(
             controls=[
                 header,
-                ft.Column(
-                    controls=filas,
-                    spacing=0,
-                    scroll=ft.ScrollMode.AUTO,
-                    expand=True,
-                ),
+                ft.Column(controls=filas, spacing=0),
             ],
             spacing=0,
-            expand=True,
         )
 
     def _grilla_mes(self, desde: date) -> ft.Control:
