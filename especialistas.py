@@ -48,110 +48,218 @@ ANCHO_DIA   = 88   # columna por día
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  EDITOR DE BLOQUES DE DISPONIBILIDAD
+#  EDITOR DE BLOQUES DE DISPONIBILIDAD  (panel desplegable)
 # ═══════════════════════════════════════════════════════════════════════════
 
+_CERT_BADGE_COLOR = {
+    "confirmado":    ("#FFE500", "#5D4037"),
+    "probable":      ("#FFF176", "#5D4037"),
+    "por_confirmar": ("#EEEEEE", "#616161"),
+}
+_CERT_LABEL = {
+    "confirmado": "Confirmado", "probable": "Probable",
+    "por_confirmar": "Por confirmar",
+}
+
+
 class DisponibilidadEditor(ft.Column):
+    """
+    Panel desplegable para configurar los bloques horarios del especialista.
+    Permite seleccionar varios días a la vez y guarda un bloque por cada día
+    seleccionado. Al guardar se refresca el calendario automáticamente.
+    """
+
     def __init__(self, especialista_id: str, on_cambio=None, snack_fn=None):
-        super().__init__(spacing=8)
+        super().__init__(spacing=0)
         self.especialista_id = especialista_id
-        self.on_cambio = on_cambio
-        self.snack_fn  = snack_fn
+        self.on_cambio       = on_cambio
+        self.snack_fn        = snack_fn
         self.bloques: list[dict] = []
-        self._filas_col = ft.Column(spacing=6)
-        self.controls = [
-            ft.Text("Bloques de Disponibilidad", size=13,
-                    weight=ft.FontWeight.W_600, color="#E65100"),
-            ft.Text("Definí los rangos horarios semanales (ej. Lunes 08:00–12:00).",
-                    size=11, color="#9E9E9E"),
-            self._filas_col,
-            ft.TextButton("+ Agregar bloque horario", icon=ft.Icons.ADD,
-                          on_click=self._agregar),
+        self._expandido = False
+
+        # ── Formulario de nuevo bloque ─────────────────────────────────────
+        self._dias_cbs = [
+            ft.Checkbox(label=d, value=False)
+            for d in ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
         ]
+        self.tf_ini  = ft.TextField(label="Desde", value="08:00",
+                                    hint_text="HH:MM", width=110)
+        self.tf_fin  = ft.TextField(label="Hasta",  value="12:00",
+                                    hint_text="HH:MM", width=110)
+        self.dd_cert = ft.Dropdown(
+            label="Certeza", value="confirmado",
+            options=[ft.dropdown.Option(v, l) for v, l in CERTEZA_OPCIONES],
+            width=190,
+        )
+
+        # ── Lista de bloques existentes ────────────────────────────────────
+        self._lista_col = ft.Column(spacing=4)
+
+        # ── Panel interior (invisible hasta abrir) ─────────────────────────
+        self._panel = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Días:", size=12, weight=ft.FontWeight.W_500),
+                    ft.Row(controls=self._dias_cbs, spacing=4),
+                    ft.Row(controls=[
+                        self.tf_ini, self.tf_fin, self.dd_cert,
+                        ft.FilledButton(
+                            "Guardar bloques", icon=ft.Icons.SAVE,
+                            on_click=self._guardar_nuevos,
+                        ),
+                    ], spacing=8),
+                    ft.Divider(height=8, color="#E0E0E0"),
+                    ft.Text("Bloques configurados:", size=12,
+                            weight=ft.FontWeight.W_500, color="#616161"),
+                    self._lista_col,
+                ],
+                spacing=8,
+            ),
+            visible=False,
+            padding=ft.padding.symmetric(horizontal=14, vertical=10),
+            bgcolor="#FAFAFA",
+            border=ft.border.only(
+                left=ft.BorderSide(1, "#E0E0E0"),
+                right=ft.BorderSide(1, "#E0E0E0"),
+                bottom=ft.BorderSide(1, "#E0E0E0"),
+            ),
+            border_radius=ft.border_radius.only(bottom_left=8, bottom_right=8),
+        )
+
+        self._btn_toggle = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.KEYBOARD_ARROW_RIGHT, size=18, color="#1565C0"),
+                ft.Text("Configurar bloques horarios", size=13,
+                        weight=ft.FontWeight.W_500, color="#1565C0"),
+                ft.Container(expand=True),
+                ft.Text("(clic para desplegar)", size=11, color="#9E9E9E"),
+            ], spacing=6),
+            padding=ft.padding.symmetric(horizontal=14, vertical=10),
+            bgcolor="#E3F2FD",
+            border=ft.border.all(1, "#BBDEFB"),
+            border_radius=8,
+            on_click=self._toggle,
+            ink=True,
+        )
+
+        self.controls = [self._btn_toggle, self._panel]
 
     def did_mount(self):
+        self._recargar()
+
+    def _recargar(self):
         try:
             self.bloques = listar_disponibilidad(self.especialista_id)
         except Exception as ex:
             if self.snack_fn:
                 self.snack_fn(f"Error: {ex}", error=True)
-        self._reconstruir_filas()
-        self.update()
+        self._reconstruir_lista()
+        if self.page:
+            self.update()
 
-    def _reconstruir_filas(self):
-        self._filas_col.controls.clear()
-        for bloque in self.bloques:
-            self._filas_col.controls.append(self._fila_bloque(bloque))
-        if self._filas_col.page:
-            self._filas_col.update()
+    def _toggle(self, e):
+        self._expandido = not self._expandido
+        self._panel.visible = self._expandido
+        # Rotar ícono
+        icono = self._btn_toggle.content.controls[0]
+        icono.name = (ft.Icons.KEYBOARD_ARROW_DOWN if self._expandido
+                      else ft.Icons.KEYBOARD_ARROW_RIGHT)
+        if self.page:
+            self.update()
 
-    def _fila_bloque(self, bloque: dict):
-        bid = bloque.get("id")
-        dd_dia = ft.Dropdown(
-            label="Día", value=str(bloque.get("dia_semana", 0)),
-            options=[ft.dropdown.Option(str(i), d) for i, d in enumerate(DIAS_SEMANA)],
-            width=130,
-            on_select=lambda e, b=bloque: self._actualizar_bloque(b, "dia_semana", int(e.control.value)),
-        )
-        tf_ini = ft.TextField(
-            label="Desde", value=bloque.get("hora_inicio", "08:00"), width=90,
-            on_blur=lambda e, b=bloque: self._actualizar_bloque(b, "hora_inicio", e.control.value),
-        )
-        tf_fin = ft.TextField(
-            label="Hasta", value=bloque.get("hora_fin", "12:00"), width=90,
-            on_blur=lambda e, b=bloque: self._actualizar_bloque(b, "hora_fin", e.control.value),
-        )
-        dd_cert = ft.Dropdown(
-            label="Certeza", value=bloque.get("certeza", "por_confirmar"),
-            options=[ft.dropdown.Option(v, l) for v, l in CERTEZA_OPCIONES],
-            width=170,
-            on_select=lambda e, b=bloque: self._actualizar_bloque(b, "certeza", e.control.value),
-        )
-        return ft.Row(controls=[
-            dd_dia, tf_ini, tf_fin, dd_cert,
-            ft.IconButton(
-                icon=ft.Icons.SAVE_OUTLINED, icon_color=ft.Colors.BLUE_400,
-                tooltip="Guardar bloque",
-                on_click=lambda e, b=bloque: self._guardar_bloque(b),
-            ),
-            ft.IconButton(
-                icon=ft.Icons.DELETE_OUTLINE, icon_color=ft.Colors.RED_400,
-                tooltip="Eliminar bloque",
-                on_click=lambda e, b=bid: self._eliminar(b),
-            ),
-        ], spacing=6)
+    # ── Guardar nuevos bloques (uno por cada día seleccionado) ─────────────
 
-    def _actualizar_bloque(self, bloque: dict, campo: str, valor):
-        bloque[campo] = valor
-
-    def _guardar_bloque(self, bloque: dict):
-        try:
-            guardar_disponibilidad(bloque)
+    def _guardar_nuevos(self, e):
+        dias_sel = [i for i, cb in enumerate(self._dias_cbs) if cb.value]
+        if not dias_sel:
             if self.snack_fn:
-                self.snack_fn("Bloque guardado.")
+                self.snack_fn("Seleccioná al menos un día.", error=True)
+            return
+        h_ini = (self.tf_ini.value or "").strip()
+        h_fin = (self.tf_fin.value or "").strip()
+        if not h_ini or not h_fin:
+            if self.snack_fn:
+                self.snack_fn("Ingresá los horarios Desde y Hasta.", error=True)
+            return
+        cert = self.dd_cert.value or "confirmado"
+        guardados = 0
+        try:
+            for dia in dias_sel:
+                payload = {
+                    "especialista_id": self.especialista_id,
+                    "dia_semana":  dia,
+                    "hora_inicio": h_ini,
+                    "hora_fin":    h_fin,
+                    "certeza":     cert,
+                }
+                res = guardar_disponibilidad(payload)
+                bloque = res[0] if isinstance(res, list) else res
+                self.bloques.append(bloque)
+                guardados += 1
+            # Limpiar selección de días
+            for cb in self._dias_cbs:
+                cb.value = False
+            self._reconstruir_lista()
+            if self.snack_fn:
+                self.snack_fn(f"{guardados} bloque(s) guardado(s) correctamente.")
             if self.on_cambio:
                 self.on_cambio()
         except Exception as ex:
             if self.snack_fn:
                 self.snack_fn(f"Error: {ex}", error=True)
 
-    def _agregar(self, e):
-        try:
-            nuevo = {
-                "especialista_id": self.especialista_id,
-                "dia_semana": 0, "hora_inicio": "08:00",
-                "hora_fin": "12:00", "certeza": "por_confirmar",
-            }
-            res = guardar_disponibilidad(nuevo)
-            bloque = res[0] if isinstance(res, list) else res
-            self.bloques.append(bloque)
-            self._filas_col.controls.append(self._fila_bloque(bloque))
-            self._filas_col.update()
-            if self.on_cambio:
-                self.on_cambio()
-        except Exception as ex:
-            if self.snack_fn:
-                self.snack_fn(f"Error: {ex}", error=True)
+    # ── Lista compacta de bloques existentes ───────────────────────────────
+
+    def _reconstruir_lista(self):
+        self._lista_col.controls.clear()
+        if not self.bloques:
+            self._lista_col.controls.append(
+                ft.Text("Sin bloques configurados.", size=11, color="#9E9E9E",
+                        italic=True)
+            )
+        for b in self.bloques:
+            cert  = b.get("certeza", "por_confirmar")
+            bg_c, fg_c = _CERT_BADGE_COLOR.get(cert, ("#EEEEEE", "#616161"))
+            dia_nombre = DIAS_SEMANA[int(b.get("dia_semana", 0))]
+            self._lista_col.controls.append(
+                ft.Container(
+                    content=ft.Row(controls=[
+                        ft.Container(
+                            content=ft.Text(dia_nombre, size=11,
+                                            weight=ft.FontWeight.W_600),
+                            bgcolor="#FFFFFF",
+                            border=ft.border.all(1, "#BDBDBD"),
+                            border_radius=4,
+                            padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                        ),
+                        ft.Text(
+                            f"{b.get('hora_inicio','?')} – {b.get('hora_fin','?')}",
+                            size=12,
+                        ),
+                        ft.Container(
+                            content=ft.Text(_CERT_LABEL.get(cert, cert),
+                                            size=10, color=fg_c),
+                            bgcolor=bg_c,
+                            border_radius=10,
+                            padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                        ),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_color=ft.Colors.RED_400,
+                            icon_size=18,
+                            tooltip="Eliminar bloque",
+                            on_click=lambda e, bid=b.get("id"): self._eliminar(bid),
+                        ),
+                    ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    padding=ft.padding.symmetric(horizontal=6, vertical=4),
+                    border_radius=6,
+                    bgcolor="#FFFFFF",
+                    border=ft.border.all(1, "#E0E0E0"),
+                )
+            )
+        if self._lista_col.page:
+            self._lista_col.update()
 
     def _eliminar(self, bid: str):
         if not bid:
@@ -159,7 +267,7 @@ class DisponibilidadEditor(ft.Column):
         try:
             eliminar_disponibilidad(bid)
             self.bloques = [b for b in self.bloques if b.get("id") != bid]
-            self._reconstruir_filas()
+            self._reconstruir_lista()
             if self.on_cambio:
                 self.on_cambio()
         except Exception as ex:
@@ -635,13 +743,13 @@ class _PanelEspecialista(ft.Column):
             self._area.controls = [
                 ft.Column(
                     controls=[
-                        self._cal,
-                        ft.Divider(height=10, color="#E0E0E0"),
                         DisponibilidadEditor(
                             eid,
                             on_cambio=lambda: self._cal.refresh() if self._cal else None,
                             snack_fn=self.snack_fn,
                         ),
+                        ft.Divider(height=10, color="#E0E0E0"),
+                        self._cal,
                     ],
                     spacing=0,
                     expand=True,
