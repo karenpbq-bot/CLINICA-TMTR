@@ -317,9 +317,11 @@ class FormularioCita(ft.Row):
                 pass
 
         # ── Campos del formulario ─────────────────────────────────────────
+        _DD_W = 234   # ancho uniforme para los dos dropdowns principales
         self.dd_paciente = ft.Dropdown(
             label="Paciente *",
             value=self.cita.get("paciente_id"),
+            width=_DD_W,
             options=[
                 ft.dropdown.Option(p["id"], f"{p.get('apellido','')}, {p.get('nombre','')}")
                 for p in pacientes
@@ -328,6 +330,7 @@ class FormularioCita(ft.Row):
         self.dd_especialista = ft.Dropdown(
             label="Especialista",
             value=self.cita.get("especialista_id"),
+            width=_DD_W,
             options=[
                 ft.dropdown.Option(
                     e["id"],
