@@ -601,26 +601,25 @@ class _FichaView(ft.ListView):
                 self._datos = {}
 
         d = self._datos
-        # Nombre y Apellido van apilados en columna → sin expand horizontal
-        self.tf_nombre    = _tf("Nombre *",    d.get("nombre",""))
-        self.tf_apellido  = _tf("Apellido *",  d.get("apellido",""))
-        self.tf_dni       = _tf("DNI / Cédula", d.get("dni",""), width=180)
+        self.tf_nombre    = _tf("Nombre *",    d.get("nombre",""), expand=True)
+        self.tf_apellido  = _tf("Apellido *",  d.get("apellido",""), expand=True)
+        self.tf_dni       = _tf("DNI / Cédula", d.get("dni",""),     expand=True)
         self.tf_fec_nac   = _tf("Fecha nacimiento", d.get("fecha_nac",""),
                                  expand=True, hint="AAAA-MM-DD")
-        self.tf_telefono  = _tf("Teléfono", d.get("telefono",""), width=200)
-        self.tf_email     = _tf("Correo electrónico", d.get("email",""), expand=True)
-        self.tf_direccion = _tf("Dirección", d.get("direccion",""))
-        self.tf_obra      = _tf("Obra social", d.get("obra_social",""), expand=True)
-        self.tf_afiliado  = _tf("Nro. afiliado", d.get("nro_afiliado",""), width=180)
+        self.tf_telefono  = _tf("Teléfono",           d.get("telefono",""), expand=True)
+        self.tf_email     = _tf("Correo electrónico", d.get("email",""),    expand=True)
+        self.tf_direccion = _tf("Dirección",          d.get("direccion",""), expand=True)
+        self.tf_obra      = _tf("Obra social",        d.get("obra_social",""), expand=True)
+        self.tf_afiliado  = _tf("Nro. afiliado",      d.get("nro_afiliado",""), expand=True)
         self.dd_sangre    = ft.Dropdown(
             label="Grupo sanguíneo",
             value=d.get("grupo_sangre", "Desconocido"),
             options=[ft.dropdown.Option(g) for g in GRUPOS_SANGRE],
-            width=170, dense=True,
+            expand=True, dense=True,
         )
         self.tf_alergias  = _tf("Alergias conocidas",
                                  d.get("alergias",""),
-                                 multiline=True, min_lines=6)
+                                 multiline=True, min_lines=5, expand=True)
 
         lbl_btn = "Actualizar ficha" if self.paciente_id else "Crear paciente"
 
@@ -649,19 +648,19 @@ class _FichaView(ft.ListView):
         )
 
         # ── Columna izquierda: Datos Personales + Contacto ───────────────
+        # Cada campo va dentro de un ft.Row para que expand=True sea HORIZONTAL
         col_izq = ft.Column(
             controls=[
                 _titulo("DATOS PERSONALES", ft.Icons.PERSON),
-                self.tf_nombre,
-                self.tf_apellido,
+                ft.Row([self.tf_nombre],   spacing=0),          # ancho completo
+                ft.Row([self.tf_apellido], spacing=0),          # ancho completo
                 ft.Row([self.tf_dni, self.tf_fec_nac, self.dd_sangre], spacing=10),
 
                 _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
                 ft.Row([self.tf_telefono, self.tf_email], spacing=10),
-                self.tf_direccion,
+                ft.Row([self.tf_direccion], spacing=0),         # ancho completo
             ],
             spacing=8, expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         )
 
         # ── Columna derecha: Cobertura médica + Alergias + Especialistas ─
@@ -671,13 +670,12 @@ class _FichaView(ft.ListView):
                 ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
 
                 _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
-                self.tf_alergias,
+                ft.Row([self.tf_alergias], spacing=0),          # ancho completo
 
                 _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
                 esp_panel,
             ],
             spacing=8, expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         )
 
         self.controls = [
