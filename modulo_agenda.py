@@ -66,10 +66,33 @@ class FormularioCita(ft.Column):
             expand=True,
             on_select=self._on_especialista,
         )
+        # Descomponer fecha_hora existente (formato ISO: YYYY-MM-DD HH:MM)
+        _fh = str(self.cita.get("fecha_hora", ""))
+        _fecha_iso  = _fh[:10]   # YYYY-MM-DD
+        _hora_val   = _fh[11:16] if len(_fh) >= 16 else ""
+
+        # Convertir fecha ISO a DD/MM/YYYY para mostrar al usuario
+        _fecha_display = ""
+        if len(_fecha_iso) == 10:
+            try:
+                a, m, d = _fecha_iso.split("-")
+                _fecha_display = f"{d}/{m}/{a}"
+            except Exception:
+                pass
+
         self.tf_fecha = ft.TextField(
-            label="Fecha y Hora  (YYYY-MM-DD HH:MM)",
-            value=self.cita.get("fecha_hora", ""),
+            label="Fecha  (DD/MM/YYYY) *",
+            value=_fecha_display,
+            hint_text="ej. 25/07/2025",
             expand=True,
+            keyboard_type=ft.KeyboardType.DATETIME,
+        )
+        self.tf_hora = ft.TextField(
+            label="Hora  (HH:MM) *",
+            value=_hora_val,
+            hint_text="ej. 09:30",
+            width=130,
+            keyboard_type=ft.KeyboardType.DATETIME,
         )
         self.dd_duracion = ft.Dropdown(
             label="Duración",
@@ -104,7 +127,7 @@ class FormularioCita(ft.Column):
             ),
             ft.Row(controls=[self.dd_paciente, self.dd_especialista], spacing=8),
             self.info_disp,
-            ft.Row(controls=[self.tf_fecha, self.dd_duracion], spacing=8),
+            ft.Row(controls=[self.tf_fecha, self.tf_hora, self.dd_duracion], spacing=8),
             ft.Row(controls=[self.dd_estado], spacing=8),
             self.tf_motivo,
             self.tf_notas,
@@ -141,19 +164,45 @@ class FormularioCita(ft.Column):
         self._cargar_disponibilidad(eid)
         self.info_disp.update()
 
+    @staticmethod
+    def _parsear_fecha_hora(fecha_str: str, hora_str: str) -> str:
+        """
+        Convierte DD/MM/YYYY + HH:MM  →  YYYY-MM-DD HH:MM
+        Lanza ValueError si el formato no es válido.
+        """
+        fecha_str = fecha_str.strip()
+        hora_str  = hora_str.strip()
+        if not fecha_str:
+            raise ValueError("Ingresá la fecha.")
+        if not hora_str:
+            raise ValueError("Ingresá la hora.")
+        partes = fecha_str.replace("-", "/").split("/")
+        if len(partes) != 3:
+            raise ValueError("Fecha inválida. Usá el formato DD/MM/YYYY.")
+        d, m, a = partes
+        if len(a) != 4 or not (a.isdigit() and m.isdigit() and d.isdigit()):
+            raise ValueError("Fecha inválida. Usá el formato DD/MM/YYYY.")
+        if ":" not in hora_str or len(hora_str) < 4:
+            raise ValueError("Hora inválida. Usá el formato HH:MM.")
+        return f"{a}-{m.zfill(2)}-{d.zfill(2)} {hora_str}"
+
     def _guardar(self, e):
         if not self.dd_paciente.value:
             if self.snack_fn:
                 self.snack_fn("Seleccioná un paciente.", error=True)
             return
-        if not self.tf_fecha.value.strip():
+        try:
+            fecha_hora_iso = self._parsear_fecha_hora(
+                self.tf_fecha.value or "", self.tf_hora.value or ""
+            )
+        except ValueError as err:
             if self.snack_fn:
-                self.snack_fn("Ingresá la fecha y hora.", error=True)
+                self.snack_fn(str(err), error=True)
             return
         datos = {
             "paciente_id":     self.dd_paciente.value,
             "especialista_id": self.dd_especialista.value,
-            "fecha_hora":      self.tf_fecha.value.strip(),
+            "fecha_hora":      fecha_hora_iso,
             "duracion_min":    int(self.dd_duracion.value or 30),
             "estado":          self.dd_estado.value or "pendiente",
             "motivo":          self.tf_motivo.value.strip(),
