@@ -97,13 +97,24 @@ async def main(page: ft.Page):
         inactividad_timer.start()
 
     async def on_route_change(e: ft.RouteChangeEvent):
+        import traceback as _tb
         reiniciar_timer()
         page.views.clear()
-        if page.route in ("/login", "/"):
-            page.views.append(_login_view(page))
-        else:
-            page.views.append(_app_shell(page.route, page))
-        page.update()
+        try:
+            if page.route in ("/login", "/"):
+                page.views.append(_login_view(page))
+            else:
+                page.views.append(_app_shell(page.route, page))
+            page.update()
+        except Exception as _err:
+            print(f"\n[ROUTE ERROR] ruta={page.route}  error={_err}", flush=True)
+            _tb.print_exc()
+            page.snack_bar = ft.SnackBar(
+                content=ft.Text(f"Error al cargar módulo: {_err}",
+                                color=ft.Colors.WHITE),
+                bgcolor=ft.Colors.RED_700, open=True,
+            )
+            page.update()
 
     async def on_view_pop(e):
         page.views.pop()

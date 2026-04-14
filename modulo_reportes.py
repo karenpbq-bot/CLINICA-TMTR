@@ -201,7 +201,7 @@ class _HistoriaClinicaTab(ft.Column):
             hint_text="Elegí un paciente…",
             options=[],
             expand=True, dense=True,
-            on_change=self._on_pac,
+            on_select=self._on_pac,
         )
         self._info_area = ft.Container(expand=True)
         self._btn_word  = ft.ElevatedButton(
