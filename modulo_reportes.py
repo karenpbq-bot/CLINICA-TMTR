@@ -138,7 +138,7 @@ def _sin_datos() -> ft.Container:
                     color=ft.Colors.GREY_500),
         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
            alignment=ft.MainAxisAlignment.CENTER),
-        expand=True, alignment=ft.alignment.center,
+        expand=True, alignment=ft.Alignment(0, 0),
     )
 
 
@@ -250,7 +250,7 @@ class _HistoriaClinicaTab(ft.Column):
         if not pid:
             return
         self._info_area.content = ft.Container(
-            content=ft.ProgressRing(), alignment=ft.alignment.center, expand=True)
+            content=ft.ProgressRing(), alignment=ft.Alignment(0, 0), expand=True)
         if self._info_area.page:
             self._info_area.update()
         try:
@@ -483,7 +483,7 @@ class _PresupuestosTab(ft.Column):
     def _cargar(self):
         self._area.content = ft.Container(
             content=ft.ProgressRing(),
-            alignment=ft.alignment.center, expand=True,
+            alignment=ft.Alignment(0, 0), expand=True,
         )
         if self._area.page:
             self._area.update()
@@ -689,7 +689,7 @@ class _AgendaTab(ft.Column):
     def _cargar(self):
         self._area.content = ft.Container(
             content=ft.ProgressRing(),
-            alignment=ft.alignment.center, expand=True,
+            alignment=ft.Alignment(0, 0), expand=True,
         )
         if self._area.page:
             self._area.update()
