@@ -1,32 +1,37 @@
 """
-Módulo de Reportes — Visualización y exportación de reportes.
-Pestañas: Resumen | Citas | Ingresos | Tratamientos
+Módulo de Reportes — ORTHOCLINIC
+Pestañas:
+  1. Historia Clínica → exporta .docx
+  2. Presupuestos      → filtros + exporta .xlsx
+  3. Agenda            → cronograma especialista + exporta .xlsx
 """
 
-import datetime
 import os
+import datetime
 import flet as ft
 
 from database import (
+    listar_pacientes,
     listar_especialistas,
-    listar_citas_rango,
-    listar_pagos_todos,
-    listar_tratamientos_todos,
-    stats_resumen,
+    obtener_paciente,
+    obtener_historia_clinica,
+    obtener_datos_reporte_presupuestos,
+    obtener_datos_citas,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Constantes de estilo
+#  Constantes visuales
 # ═══════════════════════════════════════════════════════════════════════════
 
-_AZUL     = "#1565C0"
-_AZUL_BG  = "#E3F2FD"
-_GRIS_BG  = "#F5F5F5"
-_BORDE    = "#E0E0E0"
+_AZUL      = "#1565C0"
+_AZUL_BG   = "#E3F2FD"
+_GRIS_BG   = "#F5F5F5"
+_BORDE     = "#E0E0E0"
+_OUT_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reportes")
 
 _COL_ESTADO_CITA = {
-    "pendiente":  ("#FFF8E1", "#F9A825"),
-    "confirmada": ("#E8F5E9", "#2E7D32"),
+    "pendiente":  ("#FFF8E1", "#E65100"),
+    "confirmada": ("#E8F5E9", "#1B5E20"),
     "realizada":  ("#E3F2FD", "#1565C0"),
     "cancelada":  ("#FFEBEE", "#C62828"),
 }
@@ -35,104 +40,11 @@ _COL_ESTADO_TRAT = {
     "aprobado":      ("#E8F5E9", "#1B5E20"),
     "realizado":     ("#E3F2FD", "#1565C0"),
 }
-_METODOS_PAGO = ["(Todos)", "efectivo", "tarjeta", "transferencia", "obra_social"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Helpers de UI
+#  Helpers UI
 # ═══════════════════════════════════════════════════════════════════════════
-
-def _badge(texto: str, bg: str, fg: str) -> ft.Container:
-    return ft.Container(
-        content=ft.Text(texto.capitalize(), size=10, weight=ft.FontWeight.W_600, color=fg),
-        bgcolor=bg, border_radius=20,
-        padding=ft.padding.symmetric(horizontal=10, vertical=3),
-    )
-
-
-def _encabezado_tabla(columnas: list[tuple[str, int]]) -> ft.Container:
-    return ft.Container(
-        content=ft.Row(
-            controls=[
-                ft.Text(lbl, size=11, weight=ft.FontWeight.BOLD,
-                        color=_AZUL, expand=exp)
-                for lbl, exp in columnas
-            ],
-            spacing=0,
-        ),
-        bgcolor=_AZUL_BG,
-        padding=ft.padding.symmetric(horizontal=14, vertical=8),
-        border=ft.border.only(bottom=ft.BorderSide(1.5, "#BBDEFB")),
-    )
-
-
-def _fila_tabla(celdas: list[tuple], alt: bool = False) -> ft.Container:
-    """
-    celdas: lista de (contenido, expand) donde contenido puede ser str o ft.Control
-    """
-    controls = []
-    for val, exp in celdas:
-        if isinstance(val, ft.Control):
-            controls.append(ft.Container(content=val, expand=exp))
-        else:
-            controls.append(ft.Text(str(val) if val else "—", size=11, expand=exp,
-                                    color="#212121"))
-    return ft.Container(
-        content=ft.Row(controls=controls, spacing=0),
-        bgcolor="#FAFAFA" if alt else ft.Colors.WHITE,
-        padding=ft.padding.symmetric(horizontal=14, vertical=7),
-        border=ft.border.only(bottom=ft.BorderSide(0.4, _BORDE)),
-    )
-
-
-def _kpi_card(titulo: str, valor: str, subtitulo: str,
-              icono: str, color: str) -> ft.Container:
-    return ft.Container(
-        content=ft.Column(controls=[
-            ft.Row(controls=[
-                ft.Container(
-                    content=ft.Icon(icono, size=22, color=ft.Colors.WHITE),
-                    bgcolor=color, border_radius=10,
-                    padding=ft.padding.all(8),
-                ),
-                ft.Column(controls=[
-                    ft.Text(valor, size=26, weight=ft.FontWeight.BOLD, color="#212121"),
-                    ft.Text(titulo, size=11, weight=ft.FontWeight.W_500, color="#616161"),
-                ], spacing=0),
-            ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ft.Text(subtitulo, size=10, color="#9E9E9E"),
-        ], spacing=6),
-        bgcolor=ft.Colors.WHITE,
-        border_radius=12,
-        padding=16,
-        border=ft.border.all(1, _BORDE),
-        expand=True,
-        shadow=ft.BoxShadow(blur_radius=4, color="#1212120A", offset=ft.Offset(0, 2)),
-    )
-
-
-def _btn_exportar(texto: str, on_click) -> ft.ElevatedButton:
-    return ft.ElevatedButton(
-        text=texto,
-        icon=ft.Icons.PICTURE_AS_PDF,
-        on_click=on_click,
-        style=ft.ButtonStyle(
-            bgcolor=ft.Colors.RED_800,
-            color=ft.Colors.WHITE,
-        ),
-    )
-
-
-def _titulo_modulo(texto: str) -> ft.Container:
-    return ft.Container(
-        content=ft.Row(controls=[
-            ft.Icon(ft.Icons.ASSESSMENT, color=ft.Colors.WHITE, size=18),
-            ft.Text(texto, size=14, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-        ], spacing=10),
-        bgcolor=_AZUL,
-        padding=ft.padding.symmetric(horizontal=18, vertical=12),
-    )
-
 
 def _snack(page: ft.Page, msg: str, error: bool = False):
     page.snack_bar = ft.SnackBar(
@@ -141,6 +53,108 @@ def _snack(page: ft.Page, msg: str, error: bool = False):
         open=True,
     )
     page.update()
+
+
+def _titulo_mod(texto: str) -> ft.Container:
+    return ft.Container(
+        content=ft.Row(controls=[
+            ft.Icon(ft.Icons.ASSESSMENT, color=ft.Colors.WHITE, size=18),
+            ft.Text(texto, size=14, weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE),
+        ], spacing=10),
+        bgcolor=_AZUL,
+        padding=ft.padding.symmetric(horizontal=18, vertical=12),
+    )
+
+
+def _titulo_sec(texto: str, icono: str) -> ft.Container:
+    return ft.Container(
+        content=ft.Row(controls=[
+            ft.Icon(icono, size=15, color=ft.Colors.WHITE),
+            ft.Text(texto, size=11, weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE),
+        ], spacing=8),
+        bgcolor=_AZUL, border_radius=5,
+        padding=ft.padding.symmetric(horizontal=12, vertical=7),
+        margin=ft.margin.only(top=6, bottom=3),
+    )
+
+
+def _card(content) -> ft.Container:
+    return ft.Container(
+        content=content,
+        bgcolor=ft.Colors.WHITE, border_radius=10,
+        padding=16,
+        border=ft.border.all(1, _BORDE),
+        shadow=ft.BoxShadow(blur_radius=4, color="#12121208",
+                            offset=ft.Offset(0, 2)),
+    )
+
+
+def _badge(texto: str, bg: str, fg: str) -> ft.Container:
+    return ft.Container(
+        content=ft.Text(texto.capitalize(), size=10,
+                        weight=ft.FontWeight.W_600, color=fg),
+        bgcolor=bg, border_radius=20,
+        padding=ft.padding.symmetric(horizontal=10, vertical=3),
+    )
+
+
+def _encabezado_tabla(columnas: list[tuple[str, int]]) -> ft.Container:
+    return ft.Container(
+        content=ft.Row(controls=[
+            ft.Text(lbl, size=10, weight=ft.FontWeight.BOLD,
+                    color=_AZUL, expand=exp)
+            for lbl, exp in columnas
+        ], spacing=0),
+        bgcolor=_AZUL_BG,
+        padding=ft.padding.symmetric(horizontal=12, vertical=7),
+        border=ft.border.only(bottom=ft.BorderSide(1.5, "#BBDEFB")),
+    )
+
+
+def _fila_tabla(celdas: list[tuple], alt: bool = False) -> ft.Container:
+    controls = []
+    for val, exp in celdas:
+        if isinstance(val, ft.Control):
+            controls.append(ft.Container(content=val, expand=exp))
+        else:
+            controls.append(
+                ft.Text(str(val) if val else "—", size=10, expand=exp,
+                        color="#212121"))
+    return ft.Container(
+        content=ft.Row(controls=controls, spacing=0),
+        bgcolor="#FAFAFA" if alt else ft.Colors.WHITE,
+        padding=ft.padding.symmetric(horizontal=12, vertical=6),
+        border=ft.border.only(bottom=ft.BorderSide(0.4, _BORDE)),
+    )
+
+
+def _sin_datos() -> ft.Container:
+    return ft.Container(
+        content=ft.Column(controls=[
+            ft.Icon(ft.Icons.SEARCH_OFF, size=40, color=ft.Colors.GREY_400),
+            ft.Text("Sin datos para la selección.", size=13,
+                    color=ft.Colors.GREY_500),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+           alignment=ft.MainAxisAlignment.CENTER),
+        expand=True, alignment=ft.alignment.center,
+    )
+
+
+def _btn_azul(texto: str, icono: str, on_click) -> ft.ElevatedButton:
+    return ft.ElevatedButton(
+        text=texto, icon=icono, on_click=on_click,
+        style=ft.ButtonStyle(bgcolor=_AZUL, color=ft.Colors.WHITE),
+    )
+
+
+def _btn_rojo(texto: str, on_click) -> ft.ElevatedButton:
+    return ft.ElevatedButton(
+        text=texto, icon=ft.Icons.DESCRIPTION, on_click=on_click,
+        style=ft.ButtonStyle(bgcolor=ft.Colors.RED_800,
+                              color=ft.Colors.WHITE),
+    )
 
 
 def _fmt_fecha(iso: str) -> str:
@@ -153,16 +167,6 @@ def _fmt_fecha(iso: str) -> str:
         return str(iso)[:10]
 
 
-def _fmt_datetime(iso: str) -> tuple[str, str]:
-    if not iso:
-        return "—", "—"
-    try:
-        dt = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        return dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M")
-    except Exception:
-        return str(iso)[:10], ""
-
-
 def _fmt_monto(v) -> str:
     try:
         return f"$ {float(v):,.2f}"
@@ -170,194 +174,497 @@ def _fmt_monto(v) -> str:
         return "$ 0,00"
 
 
-def _sin_datos() -> ft.Container:
-    return ft.Container(
+def _dlg_ok(page: ft.Page, titulo: str, cuerpo: str):
+    dlg = ft.AlertDialog(
+        title=ft.Text(titulo),
         content=ft.Column(controls=[
-            ft.Icon(ft.Icons.SEARCH_OFF, size=40, color=ft.Colors.GREY_400),
-            ft.Text("Sin datos para el período seleccionado.",
-                    color=ft.Colors.GREY_400, size=13),
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-           alignment=ft.MainAxisAlignment.CENTER),
-        expand=True, alignment=ft.alignment.center,
+            ft.Text(cuerpo, selectable=True, size=12),
+            ft.Text("Descargable desde la carpeta 'reportes/' del proyecto.",
+                    size=11, color="#616161"),
+        ], tight=True, spacing=6),
+        actions=[ft.TextButton("Cerrar",
+                               on_click=lambda _: page.pop_dialog())],
+        actions_alignment=ft.MainAxisAlignment.END,
     )
+    page.show_dialog(dlg)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  TAB: Resumen / Dashboard
+#  TAB 1 — Historia Clínica (.docx)
 # ═══════════════════════════════════════════════════════════════════════════
 
-class _ResumenTab(ft.Column):
-    def __init__(self):
-        super().__init__(
-            spacing=0, expand=True,
-            scroll=ft.ScrollMode.AUTO,
-        )
-        self._cargando = ft.Container(
-            content=ft.ProgressRing(),
-            alignment=ft.alignment.center,
-            expand=True,
-        )
-        self.controls = [self._cargando]
-
-    def did_mount(self):
-        self._cargar()
-
-    def _cargar(self):
-        try:
-            stats = stats_resumen()
-        except Exception as ex:
-            self.controls = [ft.Text(f"Error al cargar estadísticas: {ex}",
-                                     color=ft.Colors.RED_700)]
-            if self.page:
-                self.update()
-            return
-
-        mes = stats.get("mes_nombre", "")
-        hoy = datetime.date.today().strftime("%d/%m/%Y")
-
-        kpi_row = ft.Row(
-            controls=[
-                _kpi_card(
-                    "Pacientes registrados",
-                    str(stats["total_pacientes"]),
-                    "Total en el sistema",
-                    ft.Icons.PEOPLE, "#1565C0",
-                ),
-                _kpi_card(
-                    "Citas hoy",
-                    str(stats["citas_hoy"]),
-                    f"Agendadas para {hoy}",
-                    ft.Icons.TODAY, "#2E7D32",
-                ),
-                _kpi_card(
-                    "Citas en el mes",
-                    str(stats["citas_mes"]),
-                    mes,
-                    ft.Icons.CALENDAR_MONTH, "#6A1B9A",
-                ),
-                _kpi_card(
-                    "Ingresos del mes",
-                    _fmt_monto(stats["ingresos_mes"]),
-                    mes,
-                    ft.Icons.ATTACH_MONEY, "#E65100",
-                ),
-            ],
-            spacing=12, expand=False,
-        )
-
-        # Desglose de citas del mes
-        def _mini_stat(lbl, n, color):
-            return ft.Container(
-                content=ft.Column(controls=[
-                    ft.Text(str(n), size=22, weight=ft.FontWeight.BOLD, color=color),
-                    ft.Text(lbl, size=11, color="#616161"),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                   alignment=ft.MainAxisAlignment.CENTER, spacing=2),
-                expand=True,
-                border=ft.border.all(1, _BORDE), border_radius=10,
-                padding=12, bgcolor=ft.Colors.WHITE,
-                alignment=ft.alignment.center,
-            )
-
-        desglose_citas = ft.Container(
-            content=ft.Column(controls=[
-                ft.Text("Citas del mes — desglose",
-                        size=12, weight=ft.FontWeight.BOLD, color=_AZUL),
-                ft.Row(controls=[
-                    _mini_stat("Realizadas",  stats["citas_realizadas"],  "#1565C0"),
-                    _mini_stat("Pendientes",  stats["citas_pendientes"],  "#F9A825"),
-                    _mini_stat("Canceladas",  stats["citas_canceladas"],  "#C62828"),
-                ], spacing=10, expand=False),
-            ], spacing=10),
-            bgcolor=ft.Colors.WHITE,
-            border_radius=12, padding=16,
-            border=ft.border.all(1, _BORDE),
-            shadow=ft.BoxShadow(blur_radius=4, color="#1212120A",
-                                offset=ft.Offset(0, 2)),
-        )
-
-        trat_pend = ft.Container(
-            content=ft.Column(controls=[
-                ft.Text("Tratamientos activos",
-                        size=12, weight=ft.FontWeight.BOLD, color=_AZUL),
-                ft.Row(controls=[
-                    ft.Icon(ft.Icons.HEALING, size=28, color="#E65100"),
-                    ft.Text(str(stats["tratamientos_pend"]),
-                            size=26, weight=ft.FontWeight.BOLD),
-                ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Text("presupuestados + aprobados (pendientes de realizar)",
-                        size=10, color="#9E9E9E"),
-            ], spacing=6),
-            bgcolor=ft.Colors.WHITE,
-            border_radius=12, padding=16,
-            border=ft.border.all(1, _BORDE),
-            expand=True,
-            shadow=ft.BoxShadow(blur_radius=4, color="#1212120A",
-                                offset=ft.Offset(0, 2)),
-        )
-
-        segunda_fila = ft.Row(
-            controls=[desglose_citas, trat_pend],
-            spacing=12, expand=False,
-        )
-
-        self.controls = [
-            ft.Container(
-                content=ft.Column(controls=[
-                    ft.Text(
-                        f"Panel de control  ·  {hoy}",
-                        size=12, color="#616161",
-                    ),
-                    kpi_row,
-                    segunda_fila,
-                ], spacing=14, scroll=ft.ScrollMode.AUTO),
-                padding=ft.padding.all(18),
-                expand=True,
-            )
-        ]
-        if self.page:
-            self.update()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  TAB: Citas
-# ═══════════════════════════════════════════════════════════════════════════
-
-class _CitasTab(ft.Column):
+class _HistoriaClinicaTab(ft.Column):
     def __init__(self):
         super().__init__(spacing=0, expand=True)
-        hoy    = datetime.date.today()
-        inicio = hoy.replace(day=1).isoformat()
-        self._tf_desde = ft.TextField(
-            label="Desde", value=inicio, hint_text="AAAA-MM-DD",
-            dense=True, expand=True,
+        self._dd_pac = ft.Dropdown(
+            label="Seleccionar paciente",
+            hint_text="Elegí un paciente…",
+            options=[],
+            expand=True, dense=True,
+            on_change=self._on_pac,
         )
-        self._tf_hasta = ft.TextField(
-            label="Hasta", value=hoy.isoformat(), hint_text="AAAA-MM-DD",
-            dense=True, expand=True,
+        self._info_area = ft.Container(expand=True)
+        self._btn_word  = ft.ElevatedButton(
+            text="Generar Word (.docx)",
+            icon=ft.Icons.ARTICLE,
+            on_click=self._exportar,
+            visible=False,
+            style=ft.ButtonStyle(bgcolor=ft.Colors.INDIGO_700,
+                                  color=ft.Colors.WHITE),
         )
-        self._dd_esp   = ft.Dropdown(
-            label="Especialista", value=None,
-            options=[ft.dropdown.Option("", "(Todos)")],
+        self._paciente  = None
+        self._historia  = None
+        self._construir()
+
+    def _construir(self):
+        barra = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.PERSON_SEARCH, color=_AZUL),
+                ft.Row(controls=[self._dd_pac], expand=True),
+                self._btn_word,
+            ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.padding.symmetric(horizontal=14, vertical=10),
+            bgcolor=_GRIS_BG,
+            border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
+        )
+        self.controls = [barra, self._info_area]
+
+    def did_mount(self):
+        try:
+            pacs = listar_pacientes()
+            self._dd_pac.options = [
+                ft.dropdown.Option(
+                    p["id"],
+                    f"{p.get('apellido','—')}, {p.get('nombre','')}  "
+                    f"({'DNI: ' + p['dni'] if p.get('dni') else 'sin DNI'})",
+                )
+                for p in sorted(pacs, key=lambda x: x.get("apellido", ""))
+            ]
+            if self._dd_pac.page:
+                self._dd_pac.update()
+        except Exception as ex:
+            print(f"[HC-Tab] error cargando pacientes: {ex}", flush=True)
+
+    def _on_pac(self, e=None):
+        pid = self._dd_pac.value
+        if not pid:
+            return
+        self._info_area.content = ft.Container(
+            content=ft.ProgressRing(), alignment=ft.alignment.center, expand=True)
+        if self._info_area.page:
+            self._info_area.update()
+        try:
+            self._paciente = obtener_paciente(pid) or {}
+            self._historia = obtener_historia_clinica(pid) or {}
+        except Exception as ex:
+            self._info_area.content = ft.Text(f"Error: {ex}",
+                                               color=ft.Colors.RED_700)
+            if self._info_area.page:
+                self._info_area.update()
+            return
+        self._btn_word.visible = True
+        if self._btn_word.page:
+            self._btn_word.update()
+        self._mostrar_resumen()
+
+    def _mostrar_resumen(self):
+        p = self._paciente or {}
+        h = self._historia or {}
+        sv = h.get("signos_vitales") or {}
+        ant_dict = h.get("antecedentes") or {}
+
+        def _campo(lbl, val):
+            return ft.Column(controls=[
+                ft.Text(lbl.upper(), size=9, weight=ft.FontWeight.BOLD,
+                        color="#9E9E9E"),
+                ft.Text(str(val) if val else "—", size=11, color="#212121"),
+            ], spacing=2, expand=True)
+
+        ficha = _card(ft.Column(controls=[
+            _titulo_sec("Ficha del Paciente", ft.Icons.PERSON),
+            ft.Row(controls=[
+                _campo("Apellido",   p.get("apellido","")),
+                _campo("Nombre",     p.get("nombre","")),
+                _campo("DNI",        p.get("dni","")),
+                _campo("Fec. nac.",  _fmt_fecha(p.get("fecha_nac",""))),
+            ], spacing=16),
+            ft.Row(controls=[
+                _campo("Grupo sang.", p.get("grupo_sangre","")),
+                _campo("Teléfono",    p.get("telefono","")),
+                _campo("Email",       p.get("email","")),
+                _campo("Obra social", p.get("obra_social","")),
+            ], spacing=16),
+            ft.Row(controls=[
+                _campo("Dirección",     p.get("direccion","")),
+                _campo("Alergias",      p.get("alergias","")),
+                _campo("Nro. afiliado", p.get("nro_afiliado","")),
+            ], spacing=16),
+        ], spacing=10))
+
+        # Antecedentes positivos
+        positivos = [lbl for key, lbl in [
+            ("tratamiento_medico","Trat. médico"),("medicamentos","Medicamentos"),
+            ("alergias_med","Alergias med."),("cardiopatias","Cardiopatías"),
+            ("presion_arterial_alt","Alt. tensión"),("embarazo","Embarazo"),
+            ("diabetes","Diabetes"),("hepatitis","Hepatitis"),
+            ("irradiaciones","Irradiaciones"),("discrasias","Discrasias"),
+            ("fiebre_reumatica","Fiebre reumática"),("enf_renales","Enf. renales"),
+            ("inmunosupresion","Inmunosupresión"),("trastornos_emocionales","Trast. emocional"),
+            ("trastornos_respiratorios","Trast. respiratorio"),
+            ("trastornos_gastricos","Trast. gástrico"),
+            ("epilepsia","Epilepsia"),("cirugias","Cirugías"),
+            ("enf_orales","Enf. orales"),("otras_alteraciones","Otras alt."),
+            ("fuma_licor","Tabaquismo/Alcohol"),
+        ] if ant_dict.get(key)]
+
+        ant_chips = ft.Row(controls=[
+            ft.Container(
+                content=ft.Text(lbl, size=10, weight=ft.FontWeight.W_600,
+                                color="#C62828"),
+                bgcolor="#FFEBEE", border_radius=12,
+                padding=ft.padding.symmetric(horizontal=10, vertical=3),
+            )
+            for lbl in positivos
+        ] or [ft.Text("Sin antecedentes positivos registrados",
+                       size=11, color="#9E9E9E")],
+            wrap=True, spacing=6,
+        )
+
+        anamnesis = _card(ft.Column(controls=[
+            _titulo_sec("Anamnesis — Antecedentes positivos", ft.Icons.WARNING_AMBER),
+            ant_chips,
+        ], spacing=8))
+
+        sv_cols = [
+            ("Presión",   sv.get("tension_arterial","")),
+            ("Pulso",     sv.get("pulso","")),
+            ("Temp.",     sv.get("temperatura","")),
+            ("F. Resp.",  sv.get("frecuencia_resp","")),
+            ("Peso",      (sv.get("peso","") + " kg") if sv.get("peso") else "—"),
+            ("Talla",     (sv.get("estatura","") + " cm") if sv.get("estatura") else "—"),
+        ]
+        cv = _card(ft.Column(controls=[
+            _titulo_sec("Constantes Vitales", ft.Icons.MONITOR_HEART),
+            ft.Row(controls=[_campo(l, v) for l, v in sv_cols], spacing=12),
+        ], spacing=8))
+
+        consulta = _card(ft.Column(controls=[
+            _titulo_sec("Datos de la Consulta", ft.Icons.NOTES),
+            ft.Row(controls=[
+                _campo("N° Historia",  h.get("historia_no","")),
+                _campo("Odontólogo",   h.get("odontologo","")),
+                _campo("Fecha",        _fmt_fecha(h.get("fecha_elaboracion",""))),
+            ], spacing=16),
+            _campo("Motivo de consulta", h.get("motivo_consulta","")),
+            _campo("Hallazgos / Enfermedad actual",
+                   h.get("enfermedad_actual","")),
+            _campo("Observaciones",  h.get("observaciones","")),
+        ], spacing=10))
+
+        nota = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=_AZUL),
+                ft.Text(
+                    "Hacé clic en 'Generar Word (.docx)' para descargar "
+                    "el documento completo con los 21 antecedentes.",
+                    size=11, color=_AZUL,
+                ),
+            ], spacing=8),
+            bgcolor=_AZUL_BG, border_radius=8,
+            padding=ft.padding.symmetric(horizontal=14, vertical=8),
+        )
+
+        self._info_area.content = ft.Container(
+            content=ft.Column(
+                controls=[ficha, anamnesis, cv, consulta, nota],
+                spacing=10, scroll=ft.ScrollMode.AUTO,
+            ),
+            padding=ft.padding.all(14), expand=True,
+        )
+        if self._info_area.page:
+            self._info_area.update()
+
+    def _exportar(self, e=None):
+        if not self._paciente:
+            if self.page:
+                _snack(self.page, "Seleccioná un paciente primero.", error=True)
+            return
+        try:
+            from generar_archivos import generar_historia_clinica_docx
+            ruta   = generar_historia_clinica_docx(
+                self._paciente, self._historia or {},
+                output_dir=_OUT_DIR,
+            )
+            nombre = os.path.basename(ruta)
+            print(f"[DOCX] {ruta}", flush=True)
+            if self.page:
+                _dlg_ok(self.page, "Historia Clínica generada",
+                        f"Archivo: {nombre}")
+        except Exception as ex:
+            import traceback; traceback.print_exc()
+            if self.page:
+                _snack(self.page, f"Error: {ex}", error=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  TAB 2 — Presupuestos (.xlsx)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _PresupuestosTab(ft.Column):
+    def __init__(self):
+        super().__init__(spacing=0, expand=True)
+        self._dd_esp = ft.Dropdown(
+            label="Especialista", value="",
+            options=[ft.dropdown.Option("","(Todos)")],
             expand=True, dense=True,
         )
-        self._area = ft.Container(expand=True)
+        self._dd_pac = ft.Dropdown(
+            label="Paciente", value="",
+            options=[ft.dropdown.Option("","(Todos)")],
+            expand=True, dense=True,
+        )
+        self._tf_saldo = ft.TextField(
+            label="Saldo mínimo ($)", value="0",
+            hint_text="Ej: 500", dense=True,
+            expand=True,
+            keyboard_type=ft.KeyboardType.NUMBER,
+        )
+        self._area  = ft.Container(expand=True)
         self._datos: list[dict] = []
         self._construir_shell()
 
     def _construir_shell(self):
         filtros = ft.Container(
+            content=ft.Column(controls=[
+                ft.Row(controls=[
+                    ft.Row(controls=[self._dd_esp], expand=3),
+                    ft.Row(controls=[self._dd_pac], expand=3),
+                    ft.Row(controls=[self._tf_saldo], expand=2),
+                ], spacing=10),
+                ft.Row(controls=[
+                    _btn_azul("Aplicar filtros", ft.Icons.FILTER_ALT,
+                               lambda _: self._cargar()),
+                    ft.ElevatedButton(
+                        text="Exportar Excel (.xlsx)",
+                        icon=ft.Icons.TABLE_CHART,
+                        on_click=self._exportar,
+                        style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
+                                              color=ft.Colors.WHITE),
+                    ),
+                ], spacing=10),
+            ], spacing=8),
+            padding=ft.padding.symmetric(horizontal=14, vertical=12),
+            bgcolor=_GRIS_BG,
+            border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
+        )
+        self.controls = [filtros, self._area]
+
+    def did_mount(self):
+        try:
+            esps = listar_especialistas()
+            self._dd_esp.options = [ft.dropdown.Option("","(Todos)")] + [
+                ft.dropdown.Option(e["id"],
+                    f"{e.get('apellido','')} {e.get('nombre','')}".strip())
+                for e in esps
+            ]
+            pacs = listar_pacientes()
+            self._dd_pac.options = [ft.dropdown.Option("","(Todos)")] + [
+                ft.dropdown.Option(p["id"],
+                    f"{p.get('apellido','')} {p.get('nombre','')}".strip())
+                for p in sorted(pacs, key=lambda x: x.get("apellido",""))
+            ]
+            if self.page:
+                self._dd_esp.update()
+                self._dd_pac.update()
+        except Exception as ex:
+            print(f"[Presupuestos] error cargando opciones: {ex}", flush=True)
+        self._cargar()
+
+    def _cargar(self):
+        self._area.content = ft.Container(
+            content=ft.ProgressRing(),
+            alignment=ft.alignment.center, expand=True,
+        )
+        if self._area.page:
+            self._area.update()
+
+        try:
+            saldo_min = float((self._tf_saldo.value or "0").replace(",","."))
+        except Exception:
+            saldo_min = 0.0
+
+        filtros = {
+            "especialista_id": self._dd_esp.value or None,
+            "paciente_id":     self._dd_pac.value or None,
+            "saldo_minimo":    saldo_min,
+        }
+        try:
+            self._datos = obtener_datos_reporte_presupuestos(filtros)
+        except Exception as ex:
+            self._area.content = ft.Text(f"Error: {ex}",
+                                          color=ft.Colors.RED_700)
+            if self._area.page:
+                self._area.update()
+            return
+        self._refrescar_tabla()
+
+    def _refrescar_tabla(self):
+        datos = self._datos
+        if not datos:
+            self._area.content = _sin_datos()
+            if self._area.page:
+                self._area.update()
+            return
+
+        columnas = [
+            ("Paciente", 4), ("Descripción", 5), ("Diente", 1),
+            ("Especialista", 3), ("Estado", 2),
+            ("Costo", 2), ("Pagado", 2), ("Saldo", 2),
+        ]
+        filas = [_encabezado_tabla(columnas)]
+
+        total_c = total_p = total_s = 0.0
+        for i, t in enumerate(datos):
+            pac = (t.get("pacientes") or {})
+            esp = (t.get("especialistas") or {})
+            nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
+            nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
+            estado  = t.get("estado","")
+            bg, fg  = _COL_ESTADO_TRAT.get(estado, ("#EEE","#333"))
+            costo   = float(t.get("costo", 0))
+            pagado  = float(t.get("pagado", 0))
+            saldo   = float(t.get("saldo", 0))
+            total_c += costo; total_p += pagado; total_s += saldo
+
+            saldo_txt = ft.Text(
+                _fmt_monto(saldo), size=10,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.RED_700 if saldo > 0 else ft.Colors.GREEN_700,
+            )
+            filas.append(_fila_tabla([
+                (nom_pac or "—", 4),
+                (t.get("descripcion","") or "—", 5),
+                (str(t.get("diente","")) if t.get("diente") else "—", 1),
+                (nom_esp or "—", 3),
+                (_badge(estado, bg, fg), 2),
+                (_fmt_monto(costo), 2),
+                (_fmt_monto(pagado), 2),
+                (saldo_txt, 2),
+            ], alt=i % 2 == 1))
+
+        total_bar = ft.Container(
             content=ft.Row(controls=[
-                ft.Row(controls=[self._tf_desde], expand=2),
-                ft.Row(controls=[self._tf_hasta], expand=2),
-                ft.Row(controls=[self._dd_esp],   expand=3),
+                ft.Text(f"{len(datos)} tratamientos",
+                        size=11, weight=ft.FontWeight.BOLD),
+                ft.Container(expand=True),
+                ft.Text("Costo:", size=11),
+                ft.Text(_fmt_monto(total_c), size=12,
+                        weight=ft.FontWeight.BOLD, color=_AZUL),
+                ft.Text("  Pagado:", size=11),
+                ft.Text(_fmt_monto(total_p), size=12,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.GREEN_700),
+                ft.Text("  Saldo:", size=11),
+                ft.Text(_fmt_monto(total_s), size=12,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.RED_700 if total_s > 0
+                              else ft.Colors.GREEN_700),
+            ], spacing=8, wrap=False),
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            bgcolor=_AZUL_BG,
+            border=ft.border.only(top=ft.BorderSide(1, "#BBDEFB")),
+        )
+
+        self._area.content = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Container(
+                        content=ft.Column(controls=filas, spacing=0),
+                        expand=True,
+                    ),
+                    total_bar,
+                ],
+                spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
+            ),
+            expand=True,
+        )
+        if self._area.page:
+            self._area.update()
+
+    def _exportar(self, e=None):
+        if not self._datos:
+            if self.page:
+                _snack(self.page, "Aplicá los filtros primero.", error=True)
+            return
+        try:
+            from generar_archivos import generar_excel_presupuestos
+            esp_val = self._dd_esp.value
+            pac_val = self._dd_pac.value
+            desc    = []
+            if esp_val:
+                desc.append(f"Especialista: {esp_val[:8]}")
+            if pac_val:
+                desc.append(f"Paciente: {pac_val[:8]}")
+            sal = self._tf_saldo.value or "0"
+            if sal != "0":
+                desc.append(f"Saldo mín: ${sal}")
+
+            ruta   = generar_excel_presupuestos(
+                self._datos,
+                filtros_desc="  |  ".join(desc),
+                output_dir=_OUT_DIR,
+            )
+            nombre = os.path.basename(ruta)
+            print(f"[XLSX-Presup] {ruta}", flush=True)
+            if self.page:
+                _dlg_ok(self.page, "Excel de Presupuestos generado",
+                        f"Archivo: {nombre}")
+        except Exception as ex:
+            import traceback; traceback.print_exc()
+            if self.page:
+                _snack(self.page, f"Error: {ex}", error=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  TAB 3 — Agenda / Cronograma (.xlsx)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _AgendaTab(ft.Column):
+    def __init__(self):
+        super().__init__(spacing=0, expand=True)
+        self._dd_esp = ft.Dropdown(
+            label="Especialista", value="",
+            options=[ft.dropdown.Option("","(Todos)")],
+            expand=True, dense=True,
+        )
+        self._dd_per = ft.Dropdown(
+            label="Período", value="semana",
+            options=[
+                ft.dropdown.Option("semana",    "Próxima semana (7 días)"),
+                ft.dropdown.Option("quincena",  "Próxima quincena (15 días)"),
+                ft.dropdown.Option("mes",       "Próximo mes (30 días)"),
+            ],
+            expand=True, dense=True,
+        )
+        self._area  = ft.Container(expand=True)
+        self._datos: list[dict] = []
+        self._esp_nombre: str   = ""
+        self._construir_shell()
+
+    def _construir_shell(self):
+        filtros = ft.Container(
+            content=ft.Row(controls=[
+                ft.Row(controls=[self._dd_esp], expand=4),
+                ft.Row(controls=[self._dd_per], expand=3),
+                _btn_azul("Ver cronograma", ft.Icons.CALENDAR_VIEW_WEEK,
+                           lambda _: self._cargar()),
                 ft.ElevatedButton(
-                    "Aplicar", icon=ft.Icons.FILTER_ALT,
-                    on_click=lambda _: self._cargar(),
-                    style=ft.ButtonStyle(bgcolor=_AZUL,
-                                         color=ft.Colors.WHITE),
+                    text="Exportar Excel (.xlsx)",
+                    icon=ft.Icons.TABLE_CHART,
+                    on_click=self._exportar,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
+                                          color=ft.Colors.WHITE),
                 ),
-                _btn_exportar("Exportar PDF", self._exportar),
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.END),
             padding=ft.padding.symmetric(horizontal=14, vertical=10),
             bgcolor=_GRIS_BG,
@@ -368,15 +675,15 @@ class _CitasTab(ft.Column):
     def did_mount(self):
         try:
             esps = listar_especialistas()
-            self._dd_esp.options = [ft.dropdown.Option("", "(Todos)")] + [
+            self._dd_esp.options = [ft.dropdown.Option("","(Todos)")] + [
                 ft.dropdown.Option(e["id"],
                     f"{e.get('apellido','')} {e.get('nombre','')}".strip())
                 for e in esps
             ]
             if self._dd_esp.page:
                 self._dd_esp.update()
-        except Exception:
-            pass
+        except Exception as ex:
+            print(f"[Agenda-Tab] error: {ex}", flush=True)
         self._cargar()
 
     def _cargar(self):
@@ -386,477 +693,147 @@ class _CitasTab(ft.Column):
         )
         if self._area.page:
             self._area.update()
+
+        esp_id  = self._dd_esp.value or None
+        periodo = self._dd_per.value or "semana"
+
+        # Guardar nombre del especialista para el Excel
+        if esp_id:
+            for opt in self._dd_esp.options:
+                if opt.key == esp_id:
+                    self._esp_nombre = opt.text or ""
+                    break
+        else:
+            self._esp_nombre = ""
+
         try:
-            esp_id = self._dd_esp.value or None
-            self._datos = listar_citas_rango(
-                self._tf_desde.value.strip() or None,
-                self._tf_hasta.value.strip() or None,
-                esp_id if esp_id else None,
+            self._datos = obtener_datos_citas(
+                especialista_id=esp_id,
+                periodo=periodo,
             )
         except Exception as ex:
-            self._area.content = ft.Text(f"Error: {ex}", color=ft.Colors.RED_700)
+            self._area.content = ft.Text(f"Error: {ex}",
+                                          color=ft.Colors.RED_700)
             if self._area.page:
                 self._area.update()
             return
         self._refrescar_tabla()
 
     def _refrescar_tabla(self):
-        datos = self._datos
+        datos   = self._datos
+        periodo = self._dd_per.value or "semana"
+        PERIODOS = {"semana":"7 días","quincena":"15 días","mes":"30 días"}
+        periodo_txt = PERIODOS.get(periodo, periodo)
+
+        # Barra de info
+        info_bar = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.INFO_OUTLINE, size=14, color=_AZUL),
+                ft.Text(
+                    f"{len(datos)} cita(s) para los próximos {periodo_txt}"
+                    + (f" — {self._esp_nombre}" if self._esp_nombre else ""),
+                    size=11, color=_AZUL,
+                ),
+            ], spacing=8),
+            bgcolor=_AZUL_BG, border_radius=6,
+            padding=ft.padding.symmetric(horizontal=12, vertical=6),
+            margin=ft.margin.only(left=14, right=14, top=8, bottom=4),
+        )
+
         if not datos:
-            self._area.content = _sin_datos()
+            self._area.content = ft.Column(controls=[info_bar, _sin_datos()],
+                                            spacing=0, expand=True)
             if self._area.page:
                 self._area.update()
             return
 
+        DIAS_ES = {0:"Lun",1:"Mar",2:"Mié",3:"Jue",4:"Vie",5:"Sáb",6:"Dom"}
         columnas = [
-            ("Fecha", 2), ("Hora", 1), ("Paciente", 4),
-            ("Especialista", 3), ("Motivo", 4), ("Estado", 2),
+            ("Fecha", 2), ("Día", 1), ("Hora", 1), ("Paciente", 4),
+            ("Teléfono", 2), ("Especialista", 3), ("Motivo", 4), ("Estado", 2),
         ]
         filas = [_encabezado_tabla(columnas)]
 
         est_count: dict[str, int] = {}
         for i, c in enumerate(datos):
-            pac  = (c.get("pacientes") or {})
-            esp  = (c.get("especialistas") or {})
+            pac    = (c.get("pacientes") or {})
+            esp    = (c.get("especialistas") or {})
             nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
             nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
-            fecha, hora = _fmt_datetime(c.get("fecha_hora",""))
-            estado = c.get("estado","")
-            bg, fg = _COL_ESTADO_CITA.get(estado, ("#EEEEEE","#212121"))
+            estado  = c.get("estado","")
+            bg, fg  = _COL_ESTADO_CITA.get(estado, ("#EEE","#333"))
             est_count[estado] = est_count.get(estado, 0) + 1
+            iso = c.get("fecha_hora","")
+            try:
+                dt  = datetime.datetime.fromisoformat(iso.replace("Z","+00:00"))
+                fecha = dt.strftime("%d/%m/%Y")
+                dia   = DIAS_ES.get(dt.weekday(), "")
+                hora  = dt.strftime("%H:%M")
+            except Exception:
+                fecha = iso[:10]; dia = ""; hora = ""
+
             filas.append(_fila_tabla([
-                (fecha, 2), (hora, 1), (nom_pac or "—", 4),
-                (nom_esp or "—", 3), (c.get("motivo","") or "—", 4),
+                (fecha, 2), (dia, 1), (hora, 1),
+                (nom_pac or "—", 4),
+                (pac.get("telefono","") or "—", 2),
+                (nom_esp or "—", 3),
+                (c.get("motivo","") or "—", 4),
                 (_badge(estado, bg, fg), 2),
             ], alt=i % 2 == 1))
 
-        # Barra de totales
         total_bar = ft.Container(
             content=ft.Row(controls=[
                 ft.Text(f"Total: {len(datos)} citas", size=11,
                         weight=ft.FontWeight.BOLD),
-                *[_badge(f"{n} {est}", *_COL_ESTADO_CITA.get(est, ("#EEE","#212121")))
+                *[_badge(f"{n} {est}",
+                         *_COL_ESTADO_CITA.get(est, ("#EEE","#333")))
                   for est, n in sorted(est_count.items())],
             ], spacing=10, wrap=True),
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
             bgcolor=_AZUL_BG,
             border=ft.border.only(top=ft.BorderSide(1, "#BBDEFB")),
         )
 
         self._area.content = ft.Column(
             controls=[
+                info_bar,
                 ft.Container(
-                    content=ft.Column(controls=filas, spacing=0),
+                    content=ft.Column(
+                        controls=[
+                            ft.Container(
+                                content=ft.Column(controls=filas, spacing=0),
+                                expand=True,
+                            ),
+                            total_bar,
+                        ],
+                        spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
+                    ),
                     expand=True,
                 ),
-                total_bar,
             ],
             spacing=0, expand=True,
         )
-        self._area.content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(
-                        content=ft.Column(controls=filas, spacing=0, scroll=None),
-                        expand=True,
-                    ),
-                    total_bar,
-                ],
-                spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
-            ),
-            expand=True,
-        )
         if self._area.page:
             self._area.update()
 
     def _exportar(self, e=None):
         if not self._datos:
             if self.page:
-                _snack(self.page, "No hay datos para exportar.", error=True)
+                _snack(self.page, "Cargá el cronograma primero.", error=True)
             return
         try:
-            from generar_pdf import exportar_reporte_citas
-            out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfs")
-            ruta    = exportar_reporte_citas(self._datos,
-                                             self._tf_desde.value,
-                                             self._tf_hasta.value,
-                                             output_dir=out_dir)
-            nombre = os.path.basename(ruta)
-            print(f"[PDF-Citas] {ruta}", flush=True)
-            if self.page:
-                dlg = ft.AlertDialog(
-                    title=ft.Text("Reporte de Citas generado"),
-                    content=ft.Text(f"Guardado en: pdfs/{nombre}",
-                                    selectable=True),
-                    actions=[ft.TextButton("Cerrar",
-                             on_click=lambda _: self.page.pop_dialog())],
-                )
-                self.page.show_dialog(dlg)
-        except Exception as ex:
-            import traceback; traceback.print_exc()
-            if self.page:
-                _snack(self.page, f"Error: {ex}", error=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  TAB: Ingresos
-# ═══════════════════════════════════════════════════════════════════════════
-
-class _IngresosTab(ft.Column):
-    def __init__(self):
-        super().__init__(spacing=0, expand=True)
-        hoy    = datetime.date.today()
-        inicio = hoy.replace(day=1).isoformat()
-        self._tf_desde = ft.TextField(
-            label="Desde", value=inicio, hint_text="AAAA-MM-DD",
-            dense=True, expand=True,
-        )
-        self._tf_hasta = ft.TextField(
-            label="Hasta", value=hoy.isoformat(), hint_text="AAAA-MM-DD",
-            dense=True, expand=True,
-        )
-        self._dd_met = ft.Dropdown(
-            label="Método de pago", value=None,
-            options=[ft.dropdown.Option("", "(Todos)"),
-                     ft.dropdown.Option("efectivo",      "Efectivo"),
-                     ft.dropdown.Option("tarjeta",       "Tarjeta"),
-                     ft.dropdown.Option("transferencia", "Transferencia"),
-                     ft.dropdown.Option("obra_social",   "Obra Social")],
-            expand=True, dense=True,
-        )
-        self._area = ft.Container(expand=True)
-        self._datos: list[dict] = []
-        self._construir_shell()
-
-    def _construir_shell(self):
-        filtros = ft.Container(
-            content=ft.Row(controls=[
-                ft.Row(controls=[self._tf_desde], expand=2),
-                ft.Row(controls=[self._tf_hasta], expand=2),
-                ft.Row(controls=[self._dd_met],   expand=3),
-                ft.ElevatedButton(
-                    "Aplicar", icon=ft.Icons.FILTER_ALT,
-                    on_click=lambda _: self._cargar(),
-                    style=ft.ButtonStyle(bgcolor=_AZUL,
-                                         color=ft.Colors.WHITE),
-                ),
-                _btn_exportar("Exportar PDF", self._exportar),
-            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.END),
-            padding=ft.padding.symmetric(horizontal=14, vertical=10),
-            bgcolor=_GRIS_BG,
-            border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
-        )
-        self.controls = [filtros, self._area]
-
-    def did_mount(self):
-        self._cargar()
-
-    def _cargar(self):
-        self._area.content = ft.Container(
-            content=ft.ProgressRing(),
-            alignment=ft.alignment.center, expand=True,
-        )
-        if self._area.page:
-            self._area.update()
-        try:
-            met = self._dd_met.value or None
-            self._datos = listar_pagos_todos(
-                self._tf_desde.value.strip() or None,
-                self._tf_hasta.value.strip() or None,
-                met if met else None,
+            from generar_archivos import generar_excel_agenda
+            ruta   = generar_excel_agenda(
+                self._datos,
+                especialista_nombre=self._esp_nombre,
+                periodo=self._dd_per.value or "semana",
+                output_dir=_OUT_DIR,
             )
-        except Exception as ex:
-            self._area.content = ft.Text(f"Error: {ex}", color=ft.Colors.RED_700)
-            if self._area.page:
-                self._area.update()
-            return
-        self._refrescar_tabla()
-
-    def _refrescar_tabla(self):
-        datos = self._datos
-        if not datos:
-            self._area.content = _sin_datos()
-            if self._area.page:
-                self._area.update()
-            return
-
-        total = sum(float(p.get("monto", 0)) for p in datos)
-
-        columnas = [
-            ("Fecha", 2), ("Paciente", 4), ("Tratamiento", 5),
-            ("Monto", 2), ("Método", 2), ("Comprobante", 2),
-        ]
-        filas = [_encabezado_tabla(columnas)]
-
-        met_totales: dict[str, float] = {}
-        for i, p in enumerate(datos):
-            pac = (p.get("pacientes") or {})
-            tra = (p.get("tratamientos") or {})
-            nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
-            met = p.get("metodo","") or "—"
-            monto = float(p.get("monto", 0))
-            met_totales[met] = met_totales.get(met, 0) + monto
-            filas.append(_fila_tabla([
-                (_fmt_fecha(p.get("fecha","")), 2),
-                (nom_pac or "—", 4),
-                (tra.get("descripcion","") or "—", 5),
-                (ft.Text(_fmt_monto(monto), size=11,
-                         weight=ft.FontWeight.W_500, color="#1B5E20"), 2),
-                (met.replace("_"," ").capitalize(), 2),
-                (p.get("comprobante","") or "—", 2),
-            ], alt=i % 2 == 1))
-
-        total_bar = ft.Container(
-            content=ft.Row(controls=[
-                ft.Text(f"Total del período:", size=12,
-                        weight=ft.FontWeight.BOLD),
-                ft.Text(_fmt_monto(total), size=14,
-                        weight=ft.FontWeight.BOLD, color="#1B5E20"),
-                ft.Container(expand=True),
-                *[
-                    ft.Text(
-                        f"{m.replace('_',' ').capitalize()}: {_fmt_monto(v)}",
-                        size=10, color="#616161",
-                    )
-                    for m, v in sorted(met_totales.items())
-                ],
-            ], spacing=14, wrap=False),
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
-            bgcolor="#E8F5E9",
-            border=ft.border.only(top=ft.BorderSide(1, "#A5D6A7")),
-        )
-
-        self._area.content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(
-                        content=ft.Column(controls=filas, spacing=0),
-                        expand=True,
-                    ),
-                    total_bar,
-                ],
-                spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
-            ),
-            expand=True,
-        )
-        if self._area.page:
-            self._area.update()
-
-    def _exportar(self, e=None):
-        if not self._datos:
-            if self.page:
-                _snack(self.page, "No hay datos para exportar.", error=True)
-            return
-        try:
-            from generar_pdf import exportar_reporte_ingresos
-            out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfs")
-            ruta    = exportar_reporte_ingresos(self._datos,
-                                                self._tf_desde.value,
-                                                self._tf_hasta.value,
-                                                output_dir=out_dir)
             nombre = os.path.basename(ruta)
-            print(f"[PDF-Ingresos] {ruta}", flush=True)
+            print(f"[XLSX-Agenda] {ruta}", flush=True)
             if self.page:
-                dlg = ft.AlertDialog(
-                    title=ft.Text("Reporte de Ingresos generado"),
-                    content=ft.Text(f"Guardado en: pdfs/{nombre}",
-                                    selectable=True),
-                    actions=[ft.TextButton("Cerrar",
-                             on_click=lambda _: self.page.pop_dialog())],
-                )
-                self.page.show_dialog(dlg)
-        except Exception as ex:
-            import traceback; traceback.print_exc()
-            if self.page:
-                _snack(self.page, f"Error: {ex}", error=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  TAB: Tratamientos
-# ═══════════════════════════════════════════════════════════════════════════
-
-class _TratamientosTab(ft.Column):
-    def __init__(self):
-        super().__init__(spacing=0, expand=True)
-        self._dd_estado = ft.Dropdown(
-            label="Estado", value="",
-            options=[
-                ft.dropdown.Option("",             "(Todos)"),
-                ft.dropdown.Option("presupuestado","Presupuestado"),
-                ft.dropdown.Option("aprobado",     "Aprobado"),
-                ft.dropdown.Option("realizado",    "Realizado"),
-            ],
-            expand=True, dense=True,
-        )
-        self._area = ft.Container(expand=True)
-        self._datos: list[dict] = []
-        self._construir_shell()
-
-    def _construir_shell(self):
-        filtros = ft.Container(
-            content=ft.Row(controls=[
-                ft.Row(controls=[self._dd_estado], expand=3),
-                ft.ElevatedButton(
-                    "Aplicar", icon=ft.Icons.FILTER_ALT,
-                    on_click=lambda _: self._cargar(),
-                    style=ft.ButtonStyle(bgcolor=_AZUL,
-                                         color=ft.Colors.WHITE),
-                ),
-                _btn_exportar("Exportar PDF", self._exportar),
-            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.END),
-            padding=ft.padding.symmetric(horizontal=14, vertical=10),
-            bgcolor=_GRIS_BG,
-            border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
-        )
-        self.controls = [filtros, self._area]
-
-    def did_mount(self):
-        self._cargar()
-
-    def _cargar(self):
-        self._area.content = ft.Container(
-            content=ft.ProgressRing(),
-            alignment=ft.alignment.center, expand=True,
-        )
-        if self._area.page:
-            self._area.update()
-        try:
-            est = self._dd_estado.value or None
-            self._datos = listar_tratamientos_todos(estado=est if est else None)
-        except Exception as ex:
-            self._area.content = ft.Text(f"Error: {ex}", color=ft.Colors.RED_700)
-            if self._area.page:
-                self._area.update()
-            return
-        self._refrescar_tabla()
-
-    def _refrescar_tabla(self):
-        datos = self._datos
-        if not datos:
-            self._area.content = _sin_datos()
-            if self._area.page:
-                self._area.update()
-            return
-
-        # Resumen por estado
-        resumen: dict[str, dict] = {
-            "presupuestado": {"n": 0, "total": 0},
-            "aprobado":      {"n": 0, "total": 0},
-            "realizado":     {"n": 0, "total": 0},
-        }
-        for t in datos:
-            est   = t.get("estado","")
-            costo = float(t.get("costo", 0))
-            if est in resumen:
-                resumen[est]["n"]     += 1
-                resumen[est]["total"] += costo
-
-        etiquetas = {"presupuestado":"Presupuestados","aprobado":"Aprobados","realizado":"Realizados"}
-        resumen_row = ft.Row(
-            controls=[
-                ft.Container(
-                    content=ft.Column(controls=[
-                        ft.Text(etiquetas.get(est, est),
-                                size=11, weight=ft.FontWeight.BOLD,
-                                color=_COL_ESTADO_TRAT.get(est,("#EEE","#333"))[1]),
-                        ft.Text(str(vals["n"]),
-                                size=20, weight=ft.FontWeight.BOLD),
-                        ft.Text(_fmt_monto(vals["total"]),
-                                size=11, color="#616161"),
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                       alignment=ft.MainAxisAlignment.CENTER, spacing=3),
-                    bgcolor=_COL_ESTADO_TRAT.get(est,("#EEE","#333"))[0],
-                    border_radius=10, padding=14, expand=True,
-                    border=ft.border.all(1, _BORDE),
-                    alignment=ft.alignment.center,
-                )
-                for est, vals in resumen.items()
-            ],
-            spacing=10,
-        )
-
-        columnas = [
-            ("Fecha", 2), ("Paciente", 4), ("Descripción", 5),
-            ("Diente", 1), ("Especialista", 3), ("Costo", 2), ("Estado", 2),
-        ]
-        filas = [_encabezado_tabla(columnas)]
-        for i, t in enumerate(datos):
-            pac = (t.get("pacientes") or {})
-            esp = (t.get("especialistas") or {})
-            nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
-            nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
-            estado  = t.get("estado","")
-            bg, fg  = _COL_ESTADO_TRAT.get(estado, ("#EEE","#333"))
-            diente  = str(t.get("diente","")) if t.get("diente") else "—"
-            filas.append(_fila_tabla([
-                (_fmt_fecha(t.get("fecha","")), 2),
-                (nom_pac or "—", 4),
-                (t.get("descripcion","") or "—", 5),
-                (diente, 1),
-                (nom_esp or "—", 3),
-                (ft.Text(_fmt_monto(t.get("costo",0)), size=11,
-                         weight=ft.FontWeight.W_500), 2),
-                (_badge(estado, bg, fg), 2),
-            ], alt=i % 2 == 1))
-
-        gran_total = sum(float(t.get("costo", 0)) for t in datos)
-        total_bar  = ft.Container(
-            content=ft.Row(controls=[
-                ft.Text(f"{len(datos)} tratamientos", size=11,
-                        weight=ft.FontWeight.BOLD),
-                ft.Container(expand=True),
-                ft.Text("Total general:", size=12),
-                ft.Text(_fmt_monto(gran_total), size=14,
-                        weight=ft.FontWeight.BOLD, color="#1565C0"),
-            ], spacing=14),
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
-            bgcolor=_AZUL_BG,
-            border=ft.border.only(top=ft.BorderSide(1, "#BBDEFB")),
-        )
-
-        self._area.content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(
-                        content=resumen_row,
-                        padding=ft.padding.symmetric(horizontal=14, vertical=10),
-                    ),
-                    ft.Container(
-                        content=ft.Column(controls=filas, spacing=0),
-                        expand=True,
-                    ),
-                    total_bar,
-                ],
-                spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
-            ),
-            expand=True,
-        )
-        if self._area.page:
-            self._area.update()
-
-    def _exportar(self, e=None):
-        if not self._datos:
-            if self.page:
-                _snack(self.page, "No hay datos para exportar.", error=True)
-            return
-        try:
-            from generar_pdf import exportar_reporte_tratamientos
-            out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pdfs")
-            est     = self._dd_estado.value or ""
-            ruta    = exportar_reporte_tratamientos(self._datos,
-                                                    estado_filtro=est,
-                                                    output_dir=out_dir)
-            nombre = os.path.basename(ruta)
-            print(f"[PDF-Tratamientos] {ruta}", flush=True)
-            if self.page:
-                dlg = ft.AlertDialog(
-                    title=ft.Text("Reporte de Tratamientos generado"),
-                    content=ft.Text(f"Guardado en: pdfs/{nombre}",
-                                    selectable=True),
-                    actions=[ft.TextButton("Cerrar",
-                             on_click=lambda _: self.page.pop_dialog())],
-                )
-                self.page.show_dialog(dlg)
+                _dlg_ok(self.page, "Excel de Agenda generado",
+                        f"Archivo: {nombre}")
         except Exception as ex:
             import traceback; traceback.print_exc()
             if self.page:
@@ -868,30 +845,22 @@ class _TratamientosTab(ft.Column):
 # ═══════════════════════════════════════════════════════════════════════════
 
 _TABS = [
-    ("Resumen",        ft.Icons.DASHBOARD),
-    ("Citas",          ft.Icons.CALENDAR_MONTH),
-    ("Ingresos",       ft.Icons.ATTACH_MONEY),
-    ("Tratamientos",   ft.Icons.HEALING),
-]
-
-_TAB_VISTAS = [
-    _ResumenTab,
-    _CitasTab,
-    _IngresosTab,
-    _TratamientosTab,
+    ("Historia Clínica", ft.Icons.ARTICLE,         _HistoriaClinicaTab),
+    ("Presupuestos",     ft.Icons.REQUEST_QUOTE,    _PresupuestosTab),
+    ("Agenda",           ft.Icons.CALENDAR_VIEW_WEEK, _AgendaTab),
 ]
 
 
 class ReportesView(ft.Column):
     def __init__(self):
         super().__init__(spacing=0, expand=True, padding=0)
-        self._tab  = 0
-        self._area = ft.Container(expand=True)
+        self._tab      = 0
+        self._area     = ft.Container(expand=True)
         self._tab_btns: list[ft.ElevatedButton] = []
         self._construir()
 
     def _construir(self):
-        for i, (lbl, icn) in enumerate(_TABS):
+        for i, (lbl, icn, _cls) in enumerate(_TABS):
             idx = i
             btn = ft.ElevatedButton(
                 text=lbl, icon=icn,
@@ -905,17 +874,14 @@ class ReportesView(ft.Column):
             self._tab_btns.append(btn)
 
         barra_tabs = ft.Container(
-            content=ft.Row(
-                controls=self._tab_btns,
-                spacing=6,
-            ),
+            content=ft.Row(controls=self._tab_btns, spacing=6),
             padding=ft.padding.symmetric(horizontal=14, vertical=8),
             bgcolor="#FAFAFA",
             border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
         )
 
         self.controls = [
-            _titulo_modulo("Reportes y Estadísticas"),
+            _titulo_mod("Reportes ORTHOCLINIC — Documentos y Exportaciones"),
             barra_tabs,
             self._area,
         ]
@@ -936,7 +902,8 @@ class ReportesView(ft.Column):
         self._cargar_vista()
 
     def _cargar_vista(self):
-        vista = _TAB_VISTAS[self._tab]()
+        _cls  = _TABS[self._tab][2]
+        vista = _cls()
         self._area.content = vista
         if self._area.page:
             self._area.update()

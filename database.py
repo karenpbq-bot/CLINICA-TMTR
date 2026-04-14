@@ -545,6 +545,61 @@ def cambiar_password_usuario(usuario_id: str, nueva_password: str):
     ).eq("id", usuario_id).execute()
 
 
+# ── REPORTES ESPECÍFICOS ──────────────────────────────────────────────────
+
+def obtener_datos_reporte_presupuestos(filtros: dict | None = None) -> list[dict]:
+    """
+    Devuelve tratamientos con saldo calculado (costo − pagos realizados).
+    filtros: {especialista_id, paciente_id, saldo_minimo}
+    Cada registro incluye: pacientes, especialistas, pagado, saldo.
+    """
+    filtros = filtros or {}
+    q = get_client().table("tratamientos").select(
+        "*, pacientes(id, nombre, apellido, dni, obra_social, telefono),"
+        "   especialistas(nombre, apellido)"
+    )
+    if filtros.get("especialista_id"):
+        q = q.eq("especialista_id", filtros["especialista_id"])
+    if filtros.get("paciente_id"):
+        q = q.eq("paciente_id", filtros["paciente_id"])
+    tratamientos = q.order("fecha", desc=True).execute().data or []
+
+    saldo_min = float(filtros.get("saldo_minimo") or 0)
+    result = []
+    for t in tratamientos:
+        pagos_t = (
+            get_client().table("pagos").select("monto")
+            .eq("tratamiento_id", t["id"]).execute().data or []
+        )
+        pagado = sum(float(p.get("monto", 0)) for p in pagos_t)
+        costo  = float(t.get("costo", 0))
+        saldo  = costo - pagado
+        if saldo >= saldo_min:
+            result.append({**t, "pagado": pagado, "saldo": saldo})
+    return result
+
+
+def obtener_datos_citas(especialista_id: str | None = None,
+                        periodo: str = "semana") -> list[dict]:
+    """
+    Citas del especialista para el período indicado a partir de hoy.
+    periodo: 'semana' (7d) | 'quincena' (15d) | 'mes' (30d)
+    """
+    from datetime import date, timedelta
+    hoy   = date.today()
+    dias  = {"semana": 7, "quincena": 15, "mes": 30}.get(periodo, 7)
+    hasta = hoy + timedelta(days=dias)
+    q     = get_client().table("citas").select(
+        "*, pacientes(nombre, apellido, telefono, email),"
+        "   especialistas(nombre, apellido)"
+    )
+    q = q.gte("fecha_hora", f"{hoy.isoformat()}T00:00:00")
+    q = q.lte("fecha_hora", f"{hasta.isoformat()}T23:59:59")
+    if especialista_id:
+        q = q.eq("especialista_id", especialista_id)
+    return q.order("fecha_hora").execute().data or []
+
+
 # ── REPORTES ──────────────────────────────────────────────────────────────
 
 def listar_citas_rango(fecha_desde: str | None = None,

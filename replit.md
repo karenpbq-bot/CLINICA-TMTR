@@ -16,9 +16,11 @@ Aplicación de gestión clínica dental — **Python puro + Flet 0.84 + Supabase
 ├── modulo_pagos.py          # Pagos y facturación
 ├── modulo_usuarios.py       # CRUD de usuarios del sistema
 ├── especialistas.py         # Gestión de especialistas
-├── modulo_reportes.py       # Reportes: Resumen, Citas, Ingresos, Tratamientos
-├── generar_pdf.py           # Exportación PDF: HC completa + 3 reportes
+├── modulo_reportes.py       # Reportes: Historia Clínica (.docx), Presupuestos (.xlsx), Agenda (.xlsx)
+├── generar_archivos.py      # Generador Word (.docx) + Excel (.xlsx) con openpyxl/python-docx
+├── generar_pdf.py           # Exportación PDF: HC completa + 3 reportes legado
 ├── pdfs/                    # PDFs generados (descargables desde el explorador)
+├── reportes/                # Word y Excel generados por el módulo Reportes
 ├── schema.sql               # Referencia DDL de las 10 tablas Supabase
 ├── pyproject.toml           # Dependencias Python
 └── artifacts/mockup-sandbox # Servidor de mockups de canvas (independiente)
