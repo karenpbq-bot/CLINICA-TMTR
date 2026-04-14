@@ -436,7 +436,9 @@ class FormularioCita(ft.Row):
 
         self.controls = [panel_izq, panel_der]
 
-        # Cargar calendario si ya hay especialista
+    # La carga de datos se hace en did_mount (regla Flet 0.84):
+    # el control debe estar en la página antes de llamar a update().
+    def did_mount(self):
         if self.cita.get("especialista_id"):
             self._cargar_calendario(self.cita["especialista_id"])
 
