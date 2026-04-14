@@ -606,7 +606,7 @@ class _FichaView(ft.ListView):
         self.tf_apellido  = _tf("Apellido *",  d.get("apellido",""))
         self.tf_dni       = _tf("DNI / Cédula", d.get("dni",""), width=180)
         self.tf_fec_nac   = _tf("Fecha nacimiento", d.get("fecha_nac",""),
-                                 width=160, hint="AAAA-MM-DD")
+                                 expand=True, hint="AAAA-MM-DD")
         self.tf_telefono  = _tf("Teléfono", d.get("telefono",""), width=200)
         self.tf_email     = _tf("Correo electrónico", d.get("email",""), expand=True)
         self.tf_direccion = _tf("Dirección", d.get("direccion",""))
@@ -658,9 +658,10 @@ class _FichaView(ft.ListView):
 
                 _titulo("CONTACTO", ft.Icons.CONTACT_PHONE),
                 ft.Row([self.tf_telefono, self.tf_email], spacing=10),
-                ft.Row([self.tf_direccion], spacing=0),
+                self.tf_direccion,
             ],
             spacing=8, expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         )
 
         # ── Columna derecha: Cobertura médica + Alergias + Especialistas ─
@@ -670,13 +671,13 @@ class _FichaView(ft.ListView):
                 ft.Row([self.tf_obra, self.tf_afiliado], spacing=10),
 
                 _titulo("ALERGIAS", ft.Icons.WARNING_AMBER),
-                # Row con expand=True en el TextField → mismo ancho que el título
-                ft.Row([self.tf_alergias], spacing=0),
+                self.tf_alergias,
 
                 _titulo("ESPECIALISTAS ASIGNADOS", ft.Icons.MEDICAL_SERVICES),
                 esp_panel,
             ],
             spacing=8, expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         )
 
         self.controls = [
