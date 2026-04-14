@@ -1,7 +1,11 @@
 """
 Módulo de Agenda: citas cruzando disponibilidad confirmada de especialistas.
-Flet 0.84: Dropdown.on_select en lugar de on_change, show_dialog/pop_dialog.
+Flet 0.84: Dropdown.on_select, show_dialog/pop_dialog.
+FormularioCita incluye calendario interactivo del especialista seleccionado.
 """
+
+import calendar as _cal_mod
+from datetime import date, timedelta, datetime
 
 import flet as ft
 from database import (
@@ -22,24 +26,301 @@ ESTADO_ICON = {
     "realizada":  ft.Icons.CHECK_CIRCLE,
     "cancelada":  ft.Icons.CANCEL,
 }
+
 DIAS_CORTOS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+MESES_ES    = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+
+H_INI_CAL  = 7
+H_FIN_CAL  = 20
+ALTO_CELDA = 22
+ANCHO_HORA = 46
+
+COLOR_DISP   = "#FFF9C4"   # amarillo claro – disponibilidad
+COLOR_CITA   = "#FFB74D"   # naranja – cita ya programada
+COLOR_SEL    = "#90CAF9"   # azul claro – celda seleccionada
+COLOR_HOY    = "#E3F2FD"   # azul muy suave – día actual
+COLOR_BORDER = "#E0E0E0"
 
 
-class FormularioCita(ft.Column):
+# ── Calendario Interactivo ──────────────────────────────────────────────────
+
+class CalendarioPicker(ft.Column):
+    """
+    Calendario semanal o de 2 semanas interactivo:
+    - Amarillo  = bloque de disponibilidad configurado
+    - Naranja   = cita ya agendada
+    - Azul      = celda seleccionada por el usuario
+    Al hacer clic sobre una celda se invoca on_pick(fecha: date, hora: int).
+    """
+
+    def __init__(self, on_pick=None):
+        super().__init__(expand=True, spacing=4)
+        self.on_pick        = on_pick
+        self._especialista_id: str | None = None
+        self._disp:  list[dict] = []
+        self._citas: list[dict] = []
+        self._vista  = "semana"          # "semana" | "2semanas"
+        self._inicio = self._lunes_hoy()
+        self._sel: tuple[date, int] | None = None  # (fecha, hora) seleccionados
+
+        # ── controles de navegación ──────────────────────────────────────
+        self._lbl_periodo = ft.Text("", size=12, weight=ft.FontWeight.W_600,
+                                    color="#1565C0")
+        btn_prev = ft.IconButton(ft.Icons.CHEVRON_LEFT,  icon_size=18,
+                                 on_click=lambda e: self._navegar(-1),
+                                 style=ft.ButtonStyle(padding=4))
+        btn_next = ft.IconButton(ft.Icons.CHEVRON_RIGHT, icon_size=18,
+                                 on_click=lambda e: self._navegar(1),
+                                 style=ft.ButtonStyle(padding=4))
+        self._btn_semana   = ft.TextButton("1 sem",  on_click=lambda e: self._cambiar_vista("semana"))
+        self._btn_2semanas = ft.TextButton("2 sem",  on_click=lambda e: self._cambiar_vista("2semanas"))
+        self._actualizar_btns_vista()
+
+        nav_row = ft.Row(
+            controls=[
+                btn_prev, self._lbl_periodo, btn_next,
+                ft.Container(expand=True),
+                self._btn_semana, self._btn_2semanas,
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=2,
+        )
+
+        # ── leyenda ──────────────────────────────────────────────────────
+        def chip(label, color):
+            return ft.Row([
+                ft.Container(width=10, height=10, bgcolor=color,
+                             border_radius=2),
+                ft.Text(label, size=10, color="#616161"),
+            ], spacing=4, tight=True)
+
+        leyenda = ft.Row([
+            chip("Disponible", COLOR_DISP),
+            chip("Ocupado",    COLOR_CITA),
+            chip("Seleccionado", COLOR_SEL),
+        ], spacing=12)
+
+        self._grid_wrap = ft.Container(expand=True)
+        self.controls   = [nav_row, leyenda, ft.Divider(height=4), self._grid_wrap]
+
+    # ── helpers ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _lunes_hoy() -> date:
+        hoy = date.today()
+        return hoy - timedelta(days=hoy.weekday())
+
+    @staticmethod
+    def _parsear_fh(fh) -> datetime | None:
+        s = str(fh)[:16].replace("T", " ")
+        try:
+            return datetime.strptime(s, "%Y-%m-%d %H:%M")
+        except Exception:
+            return None
+
+    def _actualizar_btns_vista(self):
+        bold  = ft.FontWeight.BOLD
+        norm  = ft.FontWeight.NORMAL
+        azul  = ft.Colors.BLUE_900
+        gris  = ft.Colors.BLACK54
+        self._btn_semana.style   = ft.ButtonStyle(color=azul if self._vista == "semana"   else gris)
+        self._btn_2semanas.style = ft.ButtonStyle(color=azul if self._vista == "2semanas" else gris)
+
+    def _cambiar_vista(self, v: str):
+        self._vista  = v
+        self._inicio = self._lunes_hoy()
+        self._actualizar_btns_vista()
+        self._renderizar()
+        if self.page:
+            self.update()
+
+    def _navegar(self, d: int):
+        semanas = 1 if self._vista == "semana" else 2
+        self._inicio += timedelta(weeks=semanas * d)
+        self._renderizar()
+        if self.page:
+            self.update()
+
+    def _rango_fechas(self) -> tuple[date, date]:
+        semanas = 1 if self._vista == "semana" else 2
+        return self._inicio, self._inicio + timedelta(weeks=semanas)
+
+    # ── datos ────────────────────────────────────────────────────────────
+
+    def cargar_especialista(self, especialista_id: str | None):
+        self._especialista_id = especialista_id
+        self._sel = None
+        if especialista_id:
+            try:
+                self._disp = listar_disponibilidad(especialista_id)
+            except Exception:
+                self._disp = []
+            try:
+                todas = listar_citas({"especialista_id": especialista_id})
+                self._citas = [c for c in todas if c.get("estado") != "cancelada"]
+            except Exception:
+                self._citas = []
+        else:
+            self._disp  = []
+            self._citas = []
+        self._renderizar()
+        if self.page:
+            self.update()
+
+    # ── color de celda ───────────────────────────────────────────────────
+
+    def _color_celda(self, dia: date, hora: int) -> str:
+        if self._sel and self._sel == (dia, hora):
+            return COLOR_SEL
+        # cita ya agendada (naranja)
+        for c in self._citas:
+            cdt = self._parsear_fh(c.get("fecha_hora", ""))
+            if cdt is None:
+                continue
+            try:
+                dur    = int(c.get("duracion_min", 30))
+                h_fin  = cdt.hour + (cdt.minute + dur + 59) // 60
+                if cdt.date() == dia and cdt.hour <= hora < max(cdt.hour + 1, h_fin):
+                    return COLOR_CITA
+            except Exception:
+                pass
+        # disponibilidad (amarillo)
+        dia_sem = dia.weekday()
+        for b in self._disp:
+            if b.get("dia_semana") == dia_sem:
+                try:
+                    h_ini_b = int(str(b.get("hora_inicio", "00:00"))[:2])
+                    h_fin_b = int(str(b.get("hora_fin",   "00:00"))[:2])
+                    if h_ini_b <= hora < h_fin_b:
+                        return COLOR_DISP
+                except Exception:
+                    pass
+        return "#FFFFFF"
+
+    # ── renderizado ──────────────────────────────────────────────────────
+
+    def _renderizar(self):
+        desde, hasta = self._rango_fechas()
+        hasta_inc = hasta - timedelta(days=1)
+        self._lbl_periodo.value = (
+            f"{desde.day} {MESES_ES[desde.month-1]} – "
+            f"{hasta_inc.day} {MESES_ES[hasta_inc.month-1]} {hasta_inc.year}"
+        )
+        dias = [(desde + timedelta(days=i)) for i in range((hasta - desde).days)]
+        self._grid_wrap.content = self._grilla(dias)
+        self._grid_wrap.height  = 480
+
+    def _grilla(self, dias: list[date]) -> ft.Control:
+        hoy = date.today()
+
+        # ── cabecera ──────────────────────────────────────────────────
+        cab_hora = ft.Container(width=ANCHO_HORA, height=34)
+        celdas_cab = [
+            ft.Container(
+                content=ft.Column([
+                    ft.Text(DIAS_CORTOS[d.weekday()], size=9, color="#757575"),
+                    ft.Text(str(d.day), size=13, weight=ft.FontWeight.W_600,
+                            color="#1565C0" if d == hoy else "#212121"),
+                ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                expand=True, height=34,
+                bgcolor=COLOR_HOY if d == hoy else "#FAFAFA",
+                alignment=ft.Alignment(0, 0),
+                border=ft.border.only(
+                    left=ft.BorderSide(1, COLOR_BORDER),
+                    bottom=ft.BorderSide(2, "#BDBDBD"),
+                ),
+            )
+            for d in dias
+        ]
+        header = ft.Row(controls=[cab_hora] + celdas_cab, spacing=0, expand=True)
+
+        # ── filas horarias ─────────────────────────────────────────────
+        filas = []
+        for hora in range(H_INI_CAL, H_FIN_CAL):
+            etiq = ft.Container(
+                content=ft.Text(f"{hora:02d}:00", size=9, color="#9E9E9E"),
+                width=ANCHO_HORA, height=ALTO_CELDA,
+                alignment=ft.Alignment(1, -1),
+                padding=ft.padding.only(right=4, top=2),
+            )
+            celdas = []
+            for d in dias:
+                color = self._color_celda(d, hora)
+                celda = ft.Container(
+                    expand=True, height=ALTO_CELDA,
+                    bgcolor=color,
+                    border=ft.border.all(0.5, COLOR_BORDER),
+                    tooltip=f"{DIAS_CORTOS[d.weekday()]} {d.day}/{d.month}  {hora:02d}:00",
+                    on_click=self._make_click(d, hora),
+                )
+                celdas.append(celda)
+            filas.append(ft.Row(controls=[etiq] + celdas, spacing=0, expand=True))
+
+        return ft.Column(
+            controls=[
+                header,
+                ft.Column(
+                    controls=filas, spacing=0,
+                    scroll=ft.ScrollMode.AUTO, expand=True,
+                ),
+            ],
+            spacing=0, expand=True,
+        )
+
+    def _make_click(self, dia: date, hora: int):
+        def handler(e):
+            self._sel = (dia, hora)
+            self._renderizar()
+            if self.page:
+                self.update()
+            if self.on_pick:
+                self.on_pick(dia, hora)
+        return handler
+
+
+# ── Formulario de Cita ──────────────────────────────────────────────────────
+
+class FormularioCita(ft.Row):
+    """
+    Layout de dos columnas:
+    - Izquierda: formulario compacto
+    - Derecha:   calendario interactivo del especialista (clic → llena fecha/hora)
+    """
+
     def __init__(self, cita: dict, on_guardar=None, snack_fn=None):
-        super().__init__(spacing=12, scroll=ft.ScrollMode.AUTO, expand=True)
-        self.cita = cita
+        super().__init__(
+            expand=True, spacing=0,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+        self.cita       = cita
         self.on_guardar = on_guardar
-        self.snack_fn = snack_fn
+        self.snack_fn   = snack_fn
         self._construir()
 
     def _construir(self):
         try:
-            pacientes    = listar_pacientes()
+            pacientes     = listar_pacientes()
             especialistas = listar_especialistas()
         except Exception:
             pacientes, especialistas = [], []
 
+        # ── Descomponer fecha_hora existente ─────────────────────────────
+        _fh = str(self.cita.get("fecha_hora", ""))
+        _fecha_iso = _fh[:10]
+        _hora_val  = _fh[11:16] if len(_fh) >= 16 else ""
+        # También manejar formato con T (Supabase ISO)
+        if len(_fh) >= 16 and "T" in _fh:
+            _hora_val = _fh[11:16]
+
+        _fecha_display = ""
+        if len(_fecha_iso) == 10:
+            try:
+                a, m, d = _fecha_iso.split("-")
+                _fecha_display = f"{d}/{m}/{a}"
+            except Exception:
+                pass
+
+        # ── Campos del formulario ─────────────────────────────────────────
         self.dd_paciente = ft.Dropdown(
             label="Paciente *",
             value=self.cita.get("paciente_id"),
@@ -47,11 +328,6 @@ class FormularioCita(ft.Column):
                 ft.dropdown.Option(p["id"], f"{p.get('apellido','')}, {p.get('nombre','')}")
                 for p in pacientes
             ],
-            expand=True,
-        )
-        self.info_disp = ft.Text(
-            "Seleccioná un especialista para ver su disponibilidad confirmada.",
-            color="#757575", size=12,
         )
         self.dd_especialista = ft.Dropdown(
             label="Especialista",
@@ -63,113 +339,136 @@ class FormularioCita(ft.Column):
                 )
                 for e in especialistas
             ],
-            expand=True,
             on_select=self._on_especialista,
         )
-        # Descomponer fecha_hora existente (formato ISO: YYYY-MM-DD HH:MM)
-        _fh = str(self.cita.get("fecha_hora", ""))
-        _fecha_iso  = _fh[:10]   # YYYY-MM-DD
-        _hora_val   = _fh[11:16] if len(_fh) >= 16 else ""
-
-        # Convertir fecha ISO a DD/MM/YYYY para mostrar al usuario
-        _fecha_display = ""
-        if len(_fecha_iso) == 10:
-            try:
-                a, m, d = _fecha_iso.split("-")
-                _fecha_display = f"{d}/{m}/{a}"
-            except Exception:
-                pass
-
         self.tf_fecha = ft.TextField(
-            label="Fecha  (DD/MM/YYYY) *",
+            label="Fecha (DD/MM/YYYY) *",
             value=_fecha_display,
-            hint_text="ej. 25/07/2025",
-            expand=True,
+            hint_text="ej. 22/04/2026",
             keyboard_type=ft.KeyboardType.DATETIME,
+            read_only=False,
         )
         self.tf_hora = ft.TextField(
-            label="Hora  (HH:MM) *",
+            label="Hora (HH:MM) *",
             value=_hora_val,
-            hint_text="ej. 09:30",
-            width=130,
+            hint_text="ej. 15:30",
             keyboard_type=ft.KeyboardType.DATETIME,
+            read_only=False,
         )
         self.dd_duracion = ft.Dropdown(
             label="Duración",
             value=str(self.cita.get("duracion_min", 30)),
             options=[ft.dropdown.Option(str(m), f"{m} min") for m in [15, 30, 45, 60, 90]],
-            width=150,
         )
         self.dd_estado = ft.Dropdown(
             label="Estado",
             value=self.cita.get("estado", "pendiente"),
             options=[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
-            width=180,
         )
         self.tf_motivo = ft.TextField(
-            label="Motivo de la consulta",
+            label="Motivo",
             value=self.cita.get("motivo", ""),
             multiline=True, min_lines=2,
         )
         self.tf_notas = ft.TextField(
-            label="Notas adicionales",
+            label="Notas",
             value=self.cita.get("notas", ""),
             multiline=True, min_lines=2,
         )
 
-        if self.cita.get("especialista_id"):
-            self._cargar_disponibilidad(self.cita["especialista_id"])
+        # ── Calendario picker ─────────────────────────────────────────────
+        self._calendario = CalendarioPicker(on_pick=self._on_slot_seleccionado)
 
-        self.controls = [
-            ft.Text(
-                "Nueva Cita" if not self.cita.get("id") else "Editar Cita",
-                size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900,
+        # ── Panel izquierdo (formulario) ──────────────────────────────────
+        titulo = ft.Text(
+            "Nueva Cita" if not self.cita.get("id") else "Editar Cita",
+            size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900,
+        )
+        btns = ft.Row([
+            ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
+            ft.OutlinedButton(
+                "Cancelar cita", icon=ft.Icons.CANCEL,
+                on_click=self._cancelar,
+                visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
             ),
-            ft.Row(controls=[self.dd_paciente, self.dd_especialista], spacing=8),
-            self.info_disp,
-            ft.Row(controls=[self.tf_fecha, self.tf_hora, self.dd_duracion], spacing=8),
-            ft.Row(controls=[self.dd_estado], spacing=8),
-            self.tf_motivo,
-            self.tf_notas,
-            ft.Row(controls=[
-                ft.FilledButton("Guardar cita", icon=ft.Icons.SAVE, on_click=self._guardar),
-                ft.OutlinedButton(
-                    "Cancelar cita", icon=ft.Icons.CANCEL,
-                    on_click=self._cancelar,
-                    visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
-                ),
-            ], spacing=8),
-        ]
+        ], spacing=8, wrap=False)
 
-    def _cargar_disponibilidad(self, eid: str):
-        try:
-            bloques = [b for b in listar_disponibilidad(eid) if b.get("certeza") == "confirmado"]
-            if bloques:
-                resumen = "  |  ".join(
-                    f"{DIAS_CORTOS[b['dia_semana']]} {b['hora_inicio']}–{b['hora_fin']}"
-                    for b in bloques
-                )
-                self.info_disp.value = f"🟢 Disponibilidad confirmada: {resumen}"
-                self.info_disp.color = "#2E7D32"
-            else:
-                self.info_disp.value = "⚠️ Sin bloques confirmados para este especialista."
-                self.info_disp.color = "#E65100"
-        except Exception:
-            pass
+        panel_izq = ft.Container(
+            content=ft.Column(
+                controls=[
+                    titulo,
+                    ft.Divider(height=4),
+                    self.dd_paciente,
+                    self.dd_especialista,
+                    ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
+                    ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
+                    self.tf_motivo,
+                    self.tf_notas,
+                    btns,
+                ],
+                spacing=8,
+                scroll=ft.ScrollMode.AUTO,
+            ),
+            width=280,
+            padding=ft.padding.only(right=12),
+            border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
+        )
+
+        # ── Panel derecho (calendario) ────────────────────────────────────
+        self._lbl_cal = ft.Text(
+            "Seleccioná un especialista para ver su disponibilidad.",
+            size=12, color="#9E9E9E",
+            italic=True,
+        )
+        panel_der = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Disponibilidad del especialista",
+                            size=13, weight=ft.FontWeight.W_500, color="#424242"),
+                    self._lbl_cal,
+                    self._calendario,
+                ],
+                spacing=6, expand=True,
+            ),
+            expand=True,
+            padding=ft.padding.only(left=12),
+        )
+
+        self.controls = [panel_izq, panel_der]
+
+        # Cargar calendario si ya hay especialista
+        if self.cita.get("especialista_id"):
+            self._cargar_calendario(self.cita["especialista_id"])
+
+    # ── callbacks ────────────────────────────────────────────────────────
 
     def _on_especialista(self, e):
         eid = self.dd_especialista.value
-        if not eid:
-            return
-        self._cargar_disponibilidad(eid)
-        self.info_disp.update()
+        self._cargar_calendario(eid)
+
+    def _cargar_calendario(self, especialista_id: str | None):
+        if especialista_id:
+            self._lbl_cal.value = "Hacé clic en una celda para seleccionar fecha y hora."
+            self._lbl_cal.color = "#1565C0"
+        else:
+            self._lbl_cal.value = "Seleccioná un especialista para ver su disponibilidad."
+            self._lbl_cal.color = "#9E9E9E"
+        self._calendario.cargar_especialista(especialista_id)
+        if self._lbl_cal.page:
+            self._lbl_cal.update()
+
+    def _on_slot_seleccionado(self, dia: date, hora: int):
+        """El usuario hizo clic en una celda del calendario."""
+        self.tf_fecha.value = f"{dia.day:02d}/{dia.month:02d}/{dia.year}"
+        self.tf_hora.value  = f"{hora:02d}:00"
+        if self.tf_fecha.page:
+            self.tf_fecha.update()
+            self.tf_hora.update()
+
+    # ── validar / guardar ────────────────────────────────────────────────
 
     @staticmethod
     def _parsear_fecha_hora(fecha_str: str, hora_str: str) -> str:
-        """
-        Convierte DD/MM/YYYY + HH:MM  →  YYYY-MM-DD HH:MM
-        Lanza ValueError si el formato no es válido.
-        """
         fecha_str = fecha_str.strip()
         hora_str  = hora_str.strip()
         if not fecha_str:
@@ -205,8 +504,8 @@ class FormularioCita(ft.Column):
             "fecha_hora":      fecha_hora_iso,
             "duracion_min":    int(self.dd_duracion.value or 30),
             "estado":          self.dd_estado.value or "pendiente",
-            "motivo":          self.tf_motivo.value.strip(),
-            "notas":           self.tf_notas.value.strip(),
+            "motivo":          (self.tf_motivo.value or "").strip(),
+            "notas":           (self.tf_notas.value  or "").strip(),
         }
         try:
             if self.cita.get("id"):
@@ -234,6 +533,8 @@ class FormularioCita(ft.Column):
             if self.snack_fn:
                 self.snack_fn(f"Error: {ex}", error=True)
 
+
+# ── Vista de Agenda ─────────────────────────────────────────────────────────
 
 class AgendaView(ft.Row):
     def __init__(self):
@@ -267,7 +568,7 @@ class AgendaView(ft.Row):
                 ],
                 spacing=8, expand=True,
             ),
-            width=340, padding=12,
+            width=300, padding=12,
             border=ft.border.only(right=ft.BorderSide(1, "#E0E0E0")),
         )
         panel_der = ft.Container(
@@ -310,8 +611,8 @@ class AgendaView(ft.Row):
                 ft.Text("Sin citas para el filtro seleccionado.", color="#9E9E9E", size=12)
             )
         for c in filtradas:
-            pac   = c.get("pacientes") or {}
-            esp   = c.get("especialistas") or {}
+            pac    = c.get("pacientes") or {}
+            esp    = c.get("especialistas") or {}
             estado = c.get("estado", "pendiente")
             self._lista_col.controls.append(
                 ft.Container(
@@ -325,7 +626,7 @@ class AgendaView(ft.Row):
                             size=13,
                         ),
                         subtitle=ft.Text(
-                            f"{str(c.get('fecha_hora',''))[:16]}  ·  "
+                            f"{str(c.get('fecha_hora',''))[:16].replace('T',' ')}  ·  "
                             f"Dr/a. {esp.get('apellido','–')}",
                             size=11,
                         ),
