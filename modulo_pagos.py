@@ -33,7 +33,7 @@ def _tarjeta_resumen(titulo: str, monto: float, color: str) -> ft.Container:
 class FormularioPago(ft.Column):
     def __init__(self, paciente_id: str, on_guardar=None, snack_fn=None,
                  tratamientos: list | None = None):
-        super().__init__(spacing=10)
+        super().__init__(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
         self.paciente_id    = paciente_id
         self.on_guardar     = on_guardar
         self.snack_fn       = snack_fn
@@ -67,7 +67,7 @@ class FormularioPago(ft.Column):
             options=[ft.dropdown.Option(m) for m in METODOS_PAGO],
             expand=True,
         )
-        self.tf_comprob = ft.TextField(label="Nº Comprobante / Recibo", expand=True)
+        self.tf_comprob = ft.TextField(label="Nº Comprobante / Recibo")
         self.tf_notas   = ft.TextField(label="Notas", multiline=True, min_lines=2)
 
         self.controls = [
@@ -145,11 +145,17 @@ class PagosView(ft.Column):
                 for p in pacientes
             ],
             on_select=self._on_selector,
-            width=380,
+            width=360,
         )
         self.controls = [
-            ft.Text("Control de Pagos", size=18, weight=ft.FontWeight.BOLD),
-            self.dd_selector,
+            ft.Row(
+                controls=[
+                    ft.Text("Control de Pagos", size=18, weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    self.dd_selector,
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             self._resumen_row,
             self._form_area,
             self._historial,

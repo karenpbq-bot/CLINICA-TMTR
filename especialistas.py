@@ -83,13 +83,13 @@ class DisponibilidadEditor(ft.Column):
             for d in ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
         ]
         self.tf_ini  = ft.TextField(label="Desde", value="08:00",
-                                    hint_text="HH:MM", width=110)
+                                    hint_text="HH:MM", expand=True)
         self.tf_fin  = ft.TextField(label="Hasta",  value="12:00",
-                                    hint_text="HH:MM", width=110)
+                                    hint_text="HH:MM", expand=True)
         self.dd_cert = ft.Dropdown(
             label="Certeza", value="confirmado",
             options=[ft.dropdown.Option(v, l) for v, l in CERTEZA_OPCIONES],
-            width=190,
+            expand=True,
         )
 
         # ── Lista de bloques existentes ────────────────────────────────────

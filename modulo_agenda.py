@@ -333,11 +333,9 @@ class FormularioCita(ft.Row):
                 pass
 
         # ── Campos del formulario ─────────────────────────────────────────
-        _DD_W = 234   # ancho uniforme para los dos dropdowns principales
         self.dd_paciente = ft.Dropdown(
             label="Paciente *",
             value=self.cita.get("paciente_id"),
-            width=_DD_W,
             options=[
                 ft.dropdown.Option(p["id"], f"{p.get('apellido','')}, {p.get('nombre','')}")
                 for p in pacientes
@@ -346,7 +344,6 @@ class FormularioCita(ft.Row):
         self.dd_especialista = ft.Dropdown(
             label="Especialista",
             value=self.cita.get("especialista_id"),
-            width=_DD_W,
             options=[
                 ft.dropdown.Option(
                     e["id"],
@@ -361,7 +358,6 @@ class FormularioCita(ft.Row):
             value=_fecha_display,
             hint_text="ej. 22/04/2026",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=220,
             text_size=12,
             dense=True,
         )
@@ -370,7 +366,6 @@ class FormularioCita(ft.Row):
             value=_hora_val,
             hint_text="15:30",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=220,
             text_size=12,
             dense=True,
         )
@@ -378,7 +373,7 @@ class FormularioCita(ft.Row):
             label="Duración",
             value=str(self.cita.get("duracion_min", 30)),
             options=[ft.dropdown.Option(str(m), f"{m} min") for m in [15, 30, 45, 60, 90]],
-            width=112,
+            expand=True,
             text_size=12,
             dense=True,
         )
@@ -386,7 +381,7 @@ class FormularioCita(ft.Row):
             label="Estado",
             value=self.cita.get("estado", "pendiente"),
             options=[ft.dropdown.Option(s, s.capitalize()) for s in ESTADOS_CITA],
-            width=128,
+            expand=True,
             text_size=12,
             dense=True,
         )
@@ -411,14 +406,13 @@ class FormularioCita(ft.Row):
         )
         self._btn_cancelar = ft.OutlinedButton(
             "Cancelar cita", icon=ft.Icons.CANCEL,
-            on_click=self._cancelar, width=220,
+            on_click=self._cancelar,
             visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
         )
         btns = ft.Column([
-            ft.FilledButton("Guardar", icon=ft.Icons.SAVE,
-                            on_click=self._guardar, width=220),
+            ft.FilledButton("Guardar", icon=ft.Icons.SAVE, on_click=self._guardar),
             self._btn_cancelar,
-        ], spacing=6)
+        ], spacing=6, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         panel_izq = ft.Container(
             content=ft.Column(
@@ -429,7 +423,10 @@ class FormularioCita(ft.Row):
                     self.dd_especialista,
                     # Margen superior para que la etiqueta flotante no tape el dropdown
                     ft.Container(
-                        content=ft.Column([self.tf_fecha, self.tf_hora], spacing=8),
+                        content=ft.Column(
+                            [self.tf_fecha, self.tf_hora], spacing=8,
+                            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                        ),
                         margin=ft.margin.only(top=10),
                     ),
                     ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
@@ -439,6 +436,7 @@ class FormularioCita(ft.Row):
                 ],
                 spacing=8,
                 scroll=ft.ScrollMode.AUTO,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
             ),
             width=258,
             padding=ft.padding.only(right=10),
