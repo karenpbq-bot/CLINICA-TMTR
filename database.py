@@ -472,6 +472,47 @@ def listar_usuarios() -> list[dict]:
     )
 
 
+def verificar_login(usuario: str, password: str) -> dict | None:
+    """
+    Busca el usuario en la tabla 'usuarios' de Supabase y verifica la contraseña.
+    Devuelve el dict del usuario si las credenciales son correctas y el usuario
+    está activo, o None en caso contrario.
+    """
+    import bcrypt as _bcrypt
+    filas = (
+        get_client()
+        .table("usuarios")
+        .select("id,usuario,nombre,rol,activo,password_hash")
+        .eq("usuario", usuario)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not filas:
+        return None
+    u = filas[0]
+    if not u.get("activo", False):
+        return None
+    hash_guardado = (u.get("password_hash") or "").encode()
+    if not hash_guardado:
+        return None
+    try:
+        ok = _bcrypt.checkpw(password.encode(), hash_guardado)
+    except Exception:
+        return None
+    if not ok:
+        return None
+    # Actualizar último acceso
+    try:
+        from datetime import datetime, timezone
+        get_client().table("usuarios").update(
+            {"ultimo_acceso": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", u["id"]).execute()
+    except Exception:
+        pass
+    return {"usuario": u["usuario"], "nombre": u.get("nombre", ""), "rol": u.get("rol", "")}
+
+
 def crear_usuario(datos: dict) -> dict:
     """
     Crea un nuevo usuario.

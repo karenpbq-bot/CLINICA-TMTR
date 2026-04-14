@@ -2,6 +2,7 @@ import os
 import threading
 import bcrypt
 import flet as ft
+from database import verificar_login
 from modulo_pacientes import PacientesView
 from especialistas import EspecialistasView
 from modulo_agenda import AgendaView
@@ -10,24 +11,33 @@ from modulo_pagos import PagosView
 from modulo_usuarios import UsuariosView
 
 # ── Autenticación ──────────────────────────────────────────────────────────
-# Credenciales del administrador almacenadas en variables de entorno.
-# ADMIN_USUARIO y ADMIN_PASSWORD_HASH se configuran en los secrets de Replit.
+# Admin de emergencia (opcional) almacenado en variables de entorno.
 _ADMIN_USUARIO = os.environ.get("ADMIN_USUARIO", "")
 _ADMIN_HASH    = os.environ.get("ADMIN_PASSWORD_HASH", "").encode()
 
 
 def _verificar_credenciales(usuario: str, password: str) -> dict | None:
     """
-    Verifica usuario/contraseña contra las credenciales de administrador.
-    Devuelve un dict con los datos del usuario si es válido, None si no.
-    Más adelante se puede extender para consultar la tabla 'usuarios' en Supabase.
+    1. Primero busca el usuario en la tabla 'usuarios' de Supabase (todos los roles).
+    2. Si no lo encuentra, comprueba el admin de emergencia de las variables de entorno.
+    Devuelve un dict {usuario, nombre, rol} o None si las credenciales son inválidas.
     """
-    if not _ADMIN_USUARIO or not _ADMIN_HASH:
-        return None
-    if usuario != _ADMIN_USUARIO:
-        return None
-    if _ADMIN_HASH and bcrypt.checkpw(password.encode(), _ADMIN_HASH):
-        return {"usuario": usuario, "nombre": "Administrador", "rol": "Administrador"}
+    # ── Paso 1: tabla usuarios en Supabase ────────────────────────────────
+    try:
+        resultado = verificar_login(usuario, password)
+        if resultado is not None:
+            return resultado
+    except Exception:
+        pass  # Si Supabase falla, intentar con el admin de emergencia
+
+    # ── Paso 2: admin de emergencia (env vars) ────────────────────────────
+    if _ADMIN_USUARIO and _ADMIN_HASH and usuario == _ADMIN_USUARIO:
+        try:
+            if bcrypt.checkpw(password.encode(), _ADMIN_HASH):
+                return {"usuario": usuario, "nombre": "Administrador", "rol": "Administrador"}
+        except Exception:
+            pass
+
     return None
 
 INACTIVIDAD_SEGUNDOS = 300
