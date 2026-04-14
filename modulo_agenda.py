@@ -342,7 +342,7 @@ class FormularioCita(ft.Row):
             value=_fecha_display,
             hint_text="ej. 22/04/2026",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=150,
+            width=220,
             text_size=12,
             dense=True,
         )
@@ -351,7 +351,7 @@ class FormularioCita(ft.Row):
             value=_hora_val,
             hint_text="15:30",
             keyboard_type=ft.KeyboardType.DATETIME,
-            width=84,
+            width=220,
             text_size=12,
             dense=True,
         )
@@ -409,7 +409,7 @@ class FormularioCita(ft.Row):
                     self.dd_especialista,
                     # Margen superior para que la etiqueta flotante no tape el dropdown
                     ft.Container(
-                        content=ft.Row([self.tf_fecha, self.tf_hora], spacing=8),
+                        content=ft.Column([self.tf_fecha, self.tf_hora], spacing=8),
                         margin=ft.margin.only(top=10),
                     ),
                     ft.Row([self.dd_duracion, self.dd_estado], spacing=8),
