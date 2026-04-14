@@ -393,14 +393,15 @@ class FormularioCita(ft.Row):
             "Nueva Cita" if not self.cita.get("id") else "Editar Cita",
             size=15, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900,
         )
+        self._btn_cancelar = ft.OutlinedButton(
+            "Cancelar cita", icon=ft.Icons.CANCEL,
+            on_click=self._cancelar, width=220,
+            visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
+        )
         btns = ft.Column([
             ft.FilledButton("Guardar", icon=ft.Icons.SAVE,
                             on_click=self._guardar, width=220),
-            ft.OutlinedButton(
-                "Cancelar cita", icon=ft.Icons.CANCEL,
-                on_click=self._cancelar, width=220,
-                visible=bool(self.cita.get("id") and self.cita.get("estado") != "cancelada"),
-            ),
+            self._btn_cancelar,
         ], spacing=6)
 
         panel_izq = ft.Container(
@@ -530,9 +531,17 @@ class FormularioCita(ft.Row):
                 if self.snack_fn:
                     self.snack_fn("Cita actualizada correctamente.")
             else:
-                crear_cita(datos)
+                resultado = crear_cita(datos)
+                # Guardar el id retornado para que próximos guardados sean UPDATE
+                if resultado and isinstance(resultado, list) and resultado[0].get("id"):
+                    self.cita["id"] = resultado[0]["id"]
+                    self.cita["estado"] = datos.get("estado", "pendiente")
+                    # Mostrar botón Cancelar ahora que la cita existe
+                    self._btn_cancelar.visible = True
+                    if self._btn_cancelar.page:
+                        self._btn_cancelar.update()
                 if self.snack_fn:
-                    self.snack_fn("Cita creada correctamente.")
+                    self.snack_fn("Cita creada. Podés modificarla o agregar otra desde '+ Nueva Cita'.")
             if self.on_guardar:
                 self.on_guardar()
         except Exception as ex:
