@@ -5,6 +5,8 @@ Odontograma técnico de 5 superficies por pieza (estilo geométrico FDI).
 """
 
 import datetime
+import os
+import subprocess
 import flet as ft
 from database import (
     listar_pacientes,
@@ -1119,12 +1121,29 @@ class PacientesView(ft.Column):
             border=ft.border.only(bottom=ft.BorderSide(1, "#BBDEFB")),
         )
 
+        # Botón exportar PDF (visible solo cuando hay paciente seleccionado)
+        self._btn_exportar = ft.Container(
+            content=ft.Row(controls=[
+                ft.Icon(ft.Icons.PICTURE_AS_PDF, size=16, color=ft.Colors.WHITE),
+                ft.Text("Exportar HC", size=12, color=ft.Colors.WHITE,
+                        weight=ft.FontWeight.W_500),
+            ], spacing=6, tight=True),
+            bgcolor="#C62828",
+            border_radius=7,
+            padding=ft.Padding.symmetric(vertical=8, horizontal=14),
+            on_click=self._exportar_pdf,
+            ink=True,
+            visible=False,
+            tooltip="Exportar Historia Clínica completa en PDF",
+        )
+
         # Barra de selector (solo visible en tab Historia)
         self._barra_selector = ft.Container(
             visible=False,
             content=ft.Row(controls=[
                 ft.Icon(ft.Icons.PERSON_SEARCH, color="#1565C0"),
                 self.dd_selector,
+                self._btn_exportar,
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.Padding.symmetric(horizontal=16, vertical=10),
             bgcolor="#FAFAFA",
@@ -1233,6 +1252,10 @@ class PacientesView(ft.Column):
         self._barra_hist.visible = True
         if self._barra_hist.page:
             self._barra_hist.update()
+        # Mostrar botón exportar
+        self._btn_exportar.visible = True
+        if self._btn_exportar.page:
+            self._btn_exportar.update()
         self._cargar_area_hist()
 
     # ── sub-pestañas historia clínica ────────────────────────────────────
@@ -1306,6 +1329,22 @@ class PacientesView(ft.Column):
         self._tab_hist = 0
         self._actualizar_tabs_main()
         self._mostrar_historia()
+
+    def _exportar_pdf(self, e=None):
+        """Genera el PDF de Historia Clínica y lo abre con el visor del sistema."""
+        if not self.paciente_id:
+            self._snack("Seleccioná un paciente primero.", error=True)
+            return
+        try:
+            from generar_pdf import exportar_historia_clinica
+            self._snack("Generando PDF...")
+            ruta = exportar_historia_clinica(self.paciente_id)
+            subprocess.Popen(["xdg-open", ruta],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            self._snack(f"PDF generado: {os.path.basename(ruta)}")
+        except Exception as ex:
+            self._snack(f"Error al generar PDF: {ex}", error=True)
 
     def _snack(self, msg: str, error: bool = False):
         if self.page:
