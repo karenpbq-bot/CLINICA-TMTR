@@ -393,6 +393,20 @@ class TratamientosView(ft.Column):
 
     # ── Construcción base ──────────────────────────────────────────────────
 
+    def _chip_total(self, label: str, color: str) -> ft.Container:
+        """Chip compacto para mostrar un total en el encabezado."""
+        return ft.Container(
+            content=ft.Row(controls=[
+                ft.Container(width=8, height=8, bgcolor=color,
+                             border_radius=4),
+                ft.Text(f"{label}: $ –", size=11, color="#424242"),
+            ], spacing=5),
+            bgcolor="#F5F5F5",
+            border=ft.border.all(1, "#E0E0E0"),
+            border_radius=12,
+            padding=ft.padding.symmetric(horizontal=10, vertical=4),
+        )
+
     def _construir_base(self):
         try:
             pacientes = listar_pacientes()
@@ -409,16 +423,35 @@ class TratamientosView(ft.Column):
                 for p in pacientes
             ],
             on_select=self._on_selector,
-            width=380,
+            width=340,
+        )
+
+        # Chips de totales — se actualizan desde _construir_plan()
+        self._chip_plan   = self._chip_total("Total",       "#1565C0")
+        self._chip_presup = self._chip_total("Presupuesto", "#E65100")
+        self._chip_aprob  = self._chip_total("Aprobado",    "#0288D1")
+        self._chip_real   = self._chip_total("Realizado",   "#2E7D32")
+        self._fila_chips  = ft.Row(
+            controls=[self._chip_plan, self._chip_presup,
+                      self._chip_aprob, self._chip_real],
+            spacing=6, visible=False,
         )
 
         self.controls = [
             ft.Container(
-                content=ft.Column(controls=[
-                    ft.Text("Plan de Tratamientos",
-                            size=18, weight=ft.FontWeight.BOLD),
-                    self.dd_selector,
-                ], spacing=10),
+                content=ft.Row(controls=[
+                    ft.Column(controls=[
+                        ft.Text("Plan de Tratamientos",
+                                size=18, weight=ft.FontWeight.BOLD),
+                        self.dd_selector,
+                    ], spacing=6),
+                    ft.Container(expand=True),   # spacer
+                    ft.Column(controls=[
+                        ft.Container(height=22),  # alinea con el título
+                        self._fila_chips,
+                    ], spacing=4,
+                       horizontal_alignment=ft.CrossAxisAlignment.END),
+                ], vertical_alignment=ft.CrossAxisAlignment.START, spacing=12),
                 padding=ft.padding.symmetric(horizontal=16, vertical=12),
             ),
             ft.Divider(height=1, color="#E0E0E0"),
@@ -454,7 +487,7 @@ class TratamientosView(ft.Column):
             self._snack(f"Error al cargar tratamientos: {ex}", error=True)
             tratamientos = []
 
-        # Totales
+        # ── Totales → chips del encabezado ────────────────────────────────
         total_presup    = sum(float(t.get("costo", 0)) for t in tratamientos
                               if t.get("estado") == "presupuestado")
         total_aprobado  = sum(float(t.get("costo", 0)) for t in tratamientos
@@ -463,14 +496,18 @@ class TratamientosView(ft.Column):
                               if t.get("estado") == "realizado")
         total_global    = total_presup + total_aprobado + total_realizado
 
-        tarjetas = ft.Row(controls=[
-            self._tarjeta("Total Plan",    total_global,    "#1565C0"),
-            self._tarjeta("Presupuestado", total_presup,    "#E65100"),
-            self._tarjeta("Aprobado",      total_aprobado,  "#0288D1"),
-            self._tarjeta("Realizado",     total_realizado, "#2E7D32"),
-        ], spacing=8)
+        def _set_chip(chip: ft.Container, label: str, valor: float):
+            chip.content.controls[1].value = f"{label}: $ {valor:,.0f}"
 
-        # ── Columna izquierda: tarjetas + formulario ──────────────────────
+        _set_chip(self._chip_plan,   "Total",       total_global)
+        _set_chip(self._chip_presup, "Presupuesto", total_presup)
+        _set_chip(self._chip_aprob,  "Aprobado",    total_aprobado)
+        _set_chip(self._chip_real,   "Realizado",   total_realizado)
+        self._fila_chips.visible = True
+        if self._fila_chips.page:
+            self._fila_chips.update()
+
+        # ── Columna izquierda: formulario ─────────────────────────────────
         btn_agregar = ft.FilledButton(
             "- Cerrar formulario" if self._mostrar_form else "+ Agregar Tratamiento",
             icon=ft.Icons.REMOVE if self._mostrar_form else ft.Icons.ADD,
@@ -488,7 +525,7 @@ class TratamientosView(ft.Column):
             form_area = ft.Container(height=0)
 
         col_izq = ft.Column(
-            controls=[tarjetas, btn_agregar, form_area],
+            controls=[btn_agregar, form_area],
             spacing=10,
             expand=True,
         )
@@ -589,17 +626,6 @@ class TratamientosView(ft.Column):
                 lista,
             ],
             spacing=12, scroll=ft.ScrollMode.AUTO,
-        )
-
-    @staticmethod
-    def _tarjeta(titulo: str, monto: float, color: str) -> ft.Container:
-        return ft.Container(
-            content=ft.Column(controls=[
-                ft.Text(titulo, size=10, color="#FAFAFA"),
-                ft.Text(f"$ {monto:.2f}", size=15,
-                        weight=ft.FontWeight.BOLD, color="#FFFFFF"),
-            ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            bgcolor=color, border_radius=8, padding=10, width=140,
         )
 
     # ── Acciones ───────────────────────────────────────────────────────────
