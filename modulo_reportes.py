@@ -1008,19 +1008,27 @@ class ReportesView(ft.Column):
         self._tab_fin = _ReporteFinancieroTab()
         self._tab_age = _ReporteAgendaTab()
 
-        _t1 = ft.Tab("Historia Clínica",    ft.Icons.ARTICLE)
-        _t2 = ft.Tab("Reporte Financiero",  ft.Icons.ACCOUNT_BALANCE_WALLET)
-        _t3 = ft.Tab("Reporte de Agenda",   ft.Icons.CALENDAR_MONTH)
-        _t1.content = ft.Container(content=self._tab_hc,  expand=True, padding=0)
-        _t2.content = ft.Container(content=self._tab_fin, expand=True, padding=0)
-        _t3.content = ft.Container(content=self._tab_age, expand=True, padding=0)
-        _tab_items  = [_t1, _t2, _t3]
-
+        _tab_bar = ft.TabBar(
+            tabs=[
+                ft.Tab("Historia Clínica",   ft.Icons.ARTICLE),
+                ft.Tab("Reporte Financiero", ft.Icons.ACCOUNT_BALANCE_WALLET),
+                ft.Tab("Reporte de Agenda",  ft.Icons.CALENDAR_MONTH),
+            ],
+            scrollable=False,
+            indicator_color=_AZUL,
+        )
+        _tab_view = ft.TabBarView(
+            controls=[
+                ft.Container(content=self._tab_hc,  expand=True, padding=0),
+                ft.Container(content=self._tab_fin, expand=True, padding=0),
+                ft.Container(content=self._tab_age, expand=True, padding=0),
+            ],
+            expand=True,
+        )
         tabs = ft.Tabs(
-            _tab_items,
-            len(_tab_items),
+            ft.Column([_tab_bar, _tab_view], spacing=0, expand=True),
+            3,
             selected_index=0,
-            animation_duration=200,
             expand=True,
         )
 
