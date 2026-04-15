@@ -1008,33 +1008,20 @@ class ReportesView(ft.Column):
         self._tab_fin = _ReporteFinancieroTab()
         self._tab_age = _ReporteAgendaTab()
 
+        _t1 = ft.Tab("Historia Clínica",    ft.Icons.ARTICLE)
+        _t2 = ft.Tab("Reporte Financiero",  ft.Icons.ACCOUNT_BALANCE_WALLET)
+        _t3 = ft.Tab("Reporte de Agenda",   ft.Icons.CALENDAR_MONTH)
+        _t1.content = ft.Container(content=self._tab_hc,  expand=True, padding=0)
+        _t2.content = ft.Container(content=self._tab_fin, expand=True, padding=0)
+        _t3.content = ft.Container(content=self._tab_age, expand=True, padding=0)
+        _tab_items  = [_t1, _t2, _t3]
+
         tabs = ft.Tabs(
+            _tab_items,
+            len(_tab_items),
             selected_index=0,
             animation_duration=200,
             expand=True,
-            tabs=[
-                ft.Tab(
-                    text="Historia Clínica",
-                    icon=ft.Icons.ARTICLE,
-                    content=ft.Container(
-                        content=self._tab_hc, expand=True, padding=0,
-                    ),
-                ),
-                ft.Tab(
-                    text="Reporte Financiero",
-                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
-                    content=ft.Container(
-                        content=self._tab_fin, expand=True, padding=0,
-                    ),
-                ),
-                ft.Tab(
-                    text="Reporte de Agenda",
-                    icon=ft.Icons.CALENDAR_MONTH,
-                    content=ft.Container(
-                        content=self._tab_age, expand=True, padding=0,
-                    ),
-                ),
-            ],
         )
 
         self.controls = [
