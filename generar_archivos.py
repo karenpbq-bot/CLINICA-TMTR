@@ -561,3 +561,268 @@ def generar_excel_agenda(datos: list[dict], especialista_nombre: str = "",
     ws.freeze_panes = f"A{HDR_ROW + 1}"
     wb.save(ruta)
     return ruta
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  EXCEL — Reporte Financiero Total (multi-paciente / multi-especialista)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def generar_excel_financiero_total(datos: list[dict],
+                                    filtros_desc: str = "",
+                                    saldo_minimo: float = 0.0,
+                                    output_dir: str | None = None) -> str:
+    """
+    Genera Excel con resumen financiero agrupado por paciente+especialista.
+    datos: resultado de obtener_reporte_financiero_total().
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    output_dir = output_dir or _OUT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    hoy  = datetime.datetime.today()
+    ruta = os.path.join(output_dir,
+                        f"Financiero_{hoy.strftime('%Y%m%d_%H%M')}.xlsx")
+
+    wb  = openpyxl.Workbook()
+    ws  = wb.active
+    ws.title = "Reporte Financiero"
+
+    AZUL_F  = "1565C0"; AZUL_BG = "E3F2FD"
+    VERDE   = "1B5E20"; VERDE_BG = "E8F5E9"
+    ROJO_F  = "C62828"; ROJO_BG  = "FFEBEE"
+    thin    = Side(style="thin", color="BDBDBD")
+    brd     = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def _celda(ws, fila, col, valor, bold=False, bg=None,
+               fg="212121", align="left", num_fmt=None):
+        c = ws.cell(row=fila, column=col, value=valor)
+        c.font      = Font(bold=bold, color=fg, name="Calibri", size=10)
+        c.alignment = Alignment(horizontal=align, vertical="center",
+                                wrap_text=True)
+        c.border    = brd
+        if bg:
+            c.fill  = PatternFill("solid", fgColor=bg)
+        if num_fmt:
+            c.number_format = num_fmt
+        return c
+
+    # Título
+    ws.merge_cells("A1:I2")
+    c_t = ws["A1"]
+    c_t.value     = "ORTHOCLINIC — Reporte Financiero Total"
+    c_t.font      = Font(bold=True, size=14, color="FFFFFF", name="Calibri")
+    c_t.fill      = PatternFill("solid", fgColor=AZUL_F)
+    c_t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 24
+    ws.row_dimensions[2].height = 24
+
+    ws.merge_cells("A3:I3")
+    sub = ws["A3"]
+    desc_txt = filtros_desc or "Todos los especialistas / pacientes"
+    if saldo_minimo > 0:
+        desc_txt += f"   |   Saldo mín.: $ {saldo_minimo:,.2f}"
+    sub.value = (f"Generado: {hoy.strftime('%d/%m/%Y %H:%M')}   |   "
+                 f"Filtros: {desc_txt}")
+    sub.font      = Font(italic=True, size=9, color="616161", name="Calibri")
+    sub.alignment = Alignment(horizontal="left", vertical="center")
+
+    COLS = [
+        ("Paciente",       22), ("DNI",            13),
+        ("Obra Social",    16), ("Teléfono",        14),
+        ("Especialista",   22), ("N° Tratamientos",  16),
+        ("Total Costo",    14), ("Total Pagado",     14),
+        ("Saldo",          14),
+    ]
+    HDR_ROW = 4
+    for i, (lbl, ancho) in enumerate(COLS, 1):
+        _celda(ws, HDR_ROW, i, lbl, bold=True,
+               bg=AZUL_F, fg="FFFFFF", align="center")
+        ws.column_dimensions[get_column_letter(i)].width = ancho
+    ws.row_dimensions[HDR_ROW].height = 20
+
+    # Filtrar por saldo mínimo y escribir datos
+    datos_filtrados = [d for d in datos if d.get("saldo", 0) >= saldo_minimo]
+    gran_costo = gran_pagado = gran_saldo = 0.0
+
+    for i, d in enumerate(datos_filtrados):
+        fila = HDR_ROW + 1 + i
+        pac  = d.get("paciente") or {}
+        esp  = d.get("especialista") or {}
+        nom_pac = f"{_fmt(pac.get('apellido',''))} {_fmt(pac.get('nombre',''))}".strip()
+        nom_esp = f"{_fmt(esp.get('apellido',''))} {_fmt(esp.get('nombre',''))}".strip()
+        costo  = float(d.get("total_costo", 0))
+        pagado = float(d.get("total_pagado", 0))
+        saldo  = float(d.get("saldo", 0))
+        gran_costo  += costo
+        gran_pagado += pagado
+        gran_saldo  += saldo
+        alt = "#FAFAFA" if i % 2 == 1 else "FFFFFF"
+
+        _celda(ws, fila, 1, nom_pac,                     bg=alt)
+        _celda(ws, fila, 2, _fmt(pac.get("dni","")),     bg=alt)
+        _celda(ws, fila, 3, _fmt(pac.get("obra_social","")), bg=alt)
+        _celda(ws, fila, 4, _fmt(pac.get("telefono","")),bg=alt)
+        _celda(ws, fila, 5, nom_esp,                     bg=alt)
+        _celda(ws, fila, 6, d.get("n_tratamientos", 0),
+               bg=alt, align="center")
+        _celda(ws, fila, 7, costo,  bg=alt, align="right",
+               num_fmt='"$"#,##0.00')
+        _celda(ws, fila, 8, pagado, bg=alt, align="right",
+               num_fmt='"$"#,##0.00')
+        s_bg = ROJO_BG if saldo > 0 else VERDE_BG
+        s_fg = ROJO_F  if saldo > 0 else VERDE
+        _celda(ws, fila, 9, saldo, bold=True, bg=s_bg, fg=s_fg,
+               align="right", num_fmt='"$"#,##0.00')
+        ws.row_dimensions[fila].height = 16
+
+    # Totales
+    f_tot = HDR_ROW + 1 + len(datos_filtrados)
+    ws.merge_cells(f"A{f_tot}:F{f_tot}")
+    _celda(ws, f_tot, 1,
+           f"TOTALES  ({len(datos_filtrados)} filas)",
+           bold=True, bg=AZUL_F, fg="FFFFFF", align="right")
+    _celda(ws, f_tot, 7, gran_costo,  bold=True, bg=AZUL_BG,
+           align="right", num_fmt='"$"#,##0.00')
+    _celda(ws, f_tot, 8, gran_pagado, bold=True, bg=VERDE_BG,
+           fg=VERDE, align="right", num_fmt='"$"#,##0.00')
+    _celda(ws, f_tot, 9, gran_saldo,  bold=True,
+           bg=ROJO_BG if gran_saldo > 0 else VERDE_BG,
+           fg=ROJO_F  if gran_saldo > 0 else VERDE,
+           align="right", num_fmt='"$"#,##0.00')
+    ws.row_dimensions[f_tot].height = 20
+
+    ws.freeze_panes = f"A{HDR_ROW + 1}"
+    wb.save(ruta)
+    return ruta
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  EXCEL — Agenda Consolidada (multi-especialista, rango libre de fechas)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def generar_excel_agenda_consolidada(datos: list[dict],
+                                      especialistas_nombres: list[str] | None = None,
+                                      fecha_inicio: str = "",
+                                      fecha_fin: str = "",
+                                      output_dir: str | None = None) -> str:
+    """
+    Genera Excel con agenda consolidada de múltiples especialistas.
+    datos: resultado de obtener_agenda_consolidada().
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    output_dir = output_dir or _OUT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    hoy  = datetime.datetime.today()
+    ruta = os.path.join(output_dir,
+                        f"AgendaConsolidada_{hoy.strftime('%Y%m%d_%H%M')}.xlsx")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Agenda Consolidada"
+
+    AZUL_F = "1565C0"
+    thin   = Side(style="thin", color="BDBDBD")
+    brd    = Border(left=thin, right=thin, top=thin, bottom=thin)
+    DIAS_ES = {0:"Lunes",1:"Martes",2:"Miércoles",3:"Jueves",
+               4:"Viernes",5:"Sábado",6:"Domingo"}
+    _EST_BG = {"pendiente": "FFF8E1", "confirmada": "E8F5E9",
+               "realizada":  "E3F2FD", "cancelada":  "FFEBEE"}
+    _EST_FG = {"pendiente": "E65100", "confirmada": "1B5E20",
+               "realizada":  "1565C0", "cancelada":  "C62828"}
+
+    def _celda(ws, fila, col, valor, bold=False, bg=None,
+               fg="212121", align="left"):
+        c = ws.cell(row=fila, column=col, value=valor)
+        c.font      = Font(bold=bold, color=fg, name="Calibri", size=10)
+        c.alignment = Alignment(horizontal=align, vertical="center",
+                                wrap_text=True)
+        c.border    = brd
+        if bg:
+            c.fill  = PatternFill("solid", fgColor=bg)
+        return c
+
+    # Título
+    ws.merge_cells("A1:I2")
+    c_t = ws["A1"]
+    c_t.value     = "ORTHOCLINIC — Agenda Consolidada"
+    c_t.font      = Font(bold=True, size=14, color="FFFFFF", name="Calibri")
+    c_t.fill      = PatternFill("solid", fgColor=AZUL_F)
+    c_t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 22
+
+    ws.merge_cells("A3:I3")
+    c_s = ws["A3"]
+    esp_txt = (", ".join(especialistas_nombres)
+               if especialistas_nombres else "Todos los especialistas")
+    c_s.value = (
+        f"Especialistas: {esp_txt}"
+        f"   |   Período: {fecha_inicio} → {fecha_fin}"
+        f"   |   Generado: {hoy.strftime('%d/%m/%Y %H:%M')}"
+    )
+    c_s.font  = Font(italic=True, size=9, color="616161", name="Calibri")
+    c_s.alignment = Alignment(horizontal="left", vertical="center")
+
+    COLS = [
+        ("Fecha",       12), ("Día",          10),
+        ("Hora",         8), ("Paciente",     24),
+        ("Teléfono",    14), ("Especialista", 22),
+        ("Motivo",      28), ("Estado",       14),
+        ("Notas",       22),
+    ]
+    HDR_ROW = 4
+    for i, (lbl, ancho) in enumerate(COLS, 1):
+        _celda(ws, HDR_ROW, i, lbl, bold=True,
+               bg=AZUL_F, fg="FFFFFF", align="center")
+        ws.column_dimensions[get_column_letter(i)].width = ancho
+    ws.row_dimensions[HDR_ROW].height = 20
+
+    for i, c in enumerate(datos):
+        fila   = HDR_ROW + 1 + i
+        pac    = c.get("pacientes") or {}
+        esp    = c.get("especialistas") or {}
+        estado = c.get("estado", "")
+        bg     = _EST_BG.get(estado, "FFFFFF")
+        fg     = _EST_FG.get(estado, "212121")
+        nom_pac = f"{_fmt(pac.get('apellido',''))} {_fmt(pac.get('nombre',''))}".strip()
+        nom_esp = f"{_fmt(esp.get('apellido',''))} {_fmt(esp.get('nombre',''))}".strip()
+        iso = c.get("fecha_hora", "")
+        try:
+            dt    = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            fecha = dt.strftime("%d/%m/%Y")
+            dia   = DIAS_ES.get(dt.weekday(), "")
+            hora  = dt.strftime("%H:%M")
+        except Exception:
+            fecha = iso[:10]; dia = ""; hora = ""
+
+        _celda(ws, fila, 1, fecha,   bg=bg, align="center")
+        _celda(ws, fila, 2, dia,     bg=bg, align="center")
+        _celda(ws, fila, 3, hora,    bg=bg, align="center")
+        _celda(ws, fila, 4, nom_pac, bg=bg)
+        _celda(ws, fila, 5, _fmt(pac.get("telefono", "")), bg=bg)
+        _celda(ws, fila, 6, nom_esp, bg=bg)
+        _celda(ws, fila, 7, _fmt(c.get("motivo", "")),     bg=bg)
+        _celda(ws, fila, 8, estado.capitalize(), bold=True,
+               bg=bg, fg=fg, align="center")
+        _celda(ws, fila, 9, _fmt(c.get("notas", "")),      bg=bg)
+        ws.row_dimensions[fila].height = 16
+
+    # Total
+    f_tot = HDR_ROW + 1 + len(datos)
+    ws.merge_cells(f"A{f_tot}:I{f_tot}")
+    c_tot = ws.cell(row=f_tot, column=1,
+                    value=f"Total: {len(datos)} cita(s)")
+    c_tot.font      = Font(bold=True, size=10, color="FFFFFF", name="Calibri")
+    c_tot.fill      = PatternFill("solid", fgColor=AZUL_F)
+    c_tot.alignment = Alignment(horizontal="right", vertical="center")
+    c_tot.border    = brd
+    ws.row_dimensions[f_tot].height = 18
+
+    ws.freeze_panes = f"A{HDR_ROW + 1}"
+    wb.save(ruta)
+    return ruta

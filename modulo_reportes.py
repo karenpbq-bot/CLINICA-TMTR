@@ -1,9 +1,9 @@
 """
-Módulo de Reportes — ORTHOCLINIC
+Módulo de Reportes Colectivos — ORTHOCLINIC
 Pestañas:
-  1. Historia Clínica → exporta .docx
-  2. Presupuestos      → filtros + exporta .xlsx
-  3. Agenda            → cronograma especialista + exporta .xlsx
+  1. Historia Clínica    → exporta .docx  (un paciente)
+  2. Reporte Financiero  → multi-especialista / multi-paciente → .xlsx
+  3. Reporte de Agenda   → multi-especialista + rango de fechas → .xlsx
 """
 
 import os
@@ -15,8 +15,8 @@ from database import (
     listar_especialistas,
     obtener_paciente,
     obtener_historia_clinica,
-    obtener_datos_reporte_presupuestos,
-    obtener_datos_citas,
+    obtener_reporte_financiero_total,
+    obtener_agenda_consolidada,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -28,6 +28,7 @@ _AZUL_BG   = "#E3F2FD"
 _GRIS_BG   = "#F5F5F5"
 _BORDE     = "#E0E0E0"
 _OUT_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reportes")
+os.makedirs(_OUT_DIR, exist_ok=True)
 
 _COL_ESTADO_CITA = {
     "pendiente":  ("#FFF8E1", "#E65100"),
@@ -58,7 +59,7 @@ def _snack(page: ft.Page, msg: str, error: bool = False):
 def _titulo_mod(texto: str) -> ft.Container:
     return ft.Container(
         content=ft.Row(controls=[
-            ft.Icon(ft.Icons.ASSESSMENT, color=ft.Colors.WHITE, size=18),
+            ft.Icon(ft.Icons.ANALYTICS, color=ft.Colors.WHITE, size=18),
             ft.Text(texto, size=14, weight=ft.FontWeight.BOLD,
                     color=ft.Colors.WHITE),
         ], spacing=10),
@@ -149,14 +150,6 @@ def _btn_azul(texto: str, icono: str, on_click) -> ft.ElevatedButton:
     )
 
 
-def _btn_rojo(texto: str, on_click) -> ft.ElevatedButton:
-    return ft.ElevatedButton(
-        texto, icon=ft.Icons.DESCRIPTION, on_click=on_click,
-        style=ft.ButtonStyle(bgcolor=ft.Colors.RED_800,
-                              color=ft.Colors.WHITE),
-    )
-
-
 def _fmt_fecha(iso: str) -> str:
     if not iso:
         return "—"
@@ -190,7 +183,95 @@ def _dlg_ok(page: ft.Page, titulo: str, cuerpo: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  TAB 1 — Historia Clínica (.docx)
+#  _MultiSelector — Panel de selección múltiple con checkboxes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _MultiSelector(ft.Column):
+    """
+    Panel reutilizable de multi-selección mediante checkboxes.
+    Muestra 'Todos' / 'Ninguno' y una lista scrollable de ítems.
+    """
+
+    def __init__(self, label: str, alto: int = 130):
+        super().__init__(spacing=2, expand=True)
+        self._label  = label
+        self._items: list[tuple[str, str]] = []   # (id, texto)
+        self._checks: dict[str, ft.Checkbox] = {}
+        self._alto   = alto
+        self._lista  = ft.Column(spacing=0, scroll=ft.ScrollMode.AUTO)
+        self._construir()
+
+    def _construir(self):
+        self.controls = [
+            ft.Text(self._label.upper(), size=9,
+                    weight=ft.FontWeight.BOLD, color="#9E9E9E"),
+            ft.Row(controls=[
+                ft.TextButton("Todos",   on_click=self._todos),
+                ft.TextButton("Ninguno", on_click=self._ninguno),
+            ], spacing=0),
+            ft.Container(
+                content=self._lista,
+                border=ft.border.all(1, _BORDE),
+                border_radius=6,
+                bgcolor=ft.Colors.WHITE,
+                padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                height=self._alto,
+            ),
+        ]
+
+    def set_items(self, items: list[tuple[str, str]]):
+        """items: lista de (id, label). Selecciona todos por defecto."""
+        self._items  = items
+        self._checks = {}
+        controles    = []
+        for item_id, item_label in items:
+            cb = ft.Checkbox(
+                label=item_label,
+                value=True,
+                label_style=ft.TextStyle(size=11),
+            )
+            self._checks[item_id] = cb
+            controles.append(cb)
+        self._lista.controls = controles
+        if self._lista.page:
+            self._lista.update()
+
+    def get_selected_ids(self) -> list[str] | None:
+        """
+        None  → todos seleccionados (o no hay ítems) → sin filtro
+        []    → ninguno seleccionado
+        [ids] → selección parcial
+        """
+        if not self._items:
+            return None
+        selected = [iid for iid, cb in self._checks.items() if cb.value]
+        if len(selected) == len(self._items):
+            return None   # "Todos" = sin filtro
+        return selected
+
+    def get_selected_labels(self) -> list[str]:
+        """Retorna los labels de los ítems seleccionados."""
+        return [
+            label
+            for (iid, label) in self._items
+            if self._checks.get(iid) and self._checks[iid].value
+        ]
+
+    def _todos(self, e=None):
+        for cb in self._checks.values():
+            cb.value = True
+        if self.page:
+            self.update()
+
+    def _ninguno(self, e=None):
+        for cb in self._checks.values():
+            cb.value = False
+        if self.page:
+            self.update()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  TAB 1 — Historia Clínica (.docx)  [un paciente a la vez]
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _HistoriaClinicaTab(ft.Column):
@@ -209,11 +290,11 @@ class _HistoriaClinicaTab(ft.Column):
             icon=ft.Icons.ARTICLE,
             on_click=self._exportar,
             visible=False,
-            style=ft.ButtonStyle(bgcolor=ft.Colors.INDIGO_700,
+            style=ft.ButtonStyle(bgcolor="#283593",
                                   color=ft.Colors.WHITE),
         )
-        self._paciente  = None
-        self._historia  = None
+        self._paciente = None
+        self._historia = None
         self._construir()
 
     def _construir(self):
@@ -222,7 +303,8 @@ class _HistoriaClinicaTab(ft.Column):
                 ft.Icon(ft.Icons.PERSON_SEARCH, color=_AZUL),
                 ft.Row(controls=[self._dd_pac], expand=True),
                 self._btn_word,
-            ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ], spacing=12,
+               vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.padding.symmetric(horizontal=14, vertical=10),
             bgcolor=_GRIS_BG,
             border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
@@ -250,7 +332,8 @@ class _HistoriaClinicaTab(ft.Column):
         if not pid:
             return
         self._info_area.content = ft.Container(
-            content=ft.ProgressRing(), alignment=ft.Alignment(0, 0), expand=True)
+            content=ft.ProgressRing(),
+            alignment=ft.Alignment(0, 0), expand=True)
         if self._info_area.page:
             self._info_area.update()
         try:
@@ -283,38 +366,46 @@ class _HistoriaClinicaTab(ft.Column):
         ficha = _card(ft.Column(controls=[
             _titulo_sec("Ficha del Paciente", ft.Icons.PERSON),
             ft.Row(controls=[
-                _campo("Apellido",   p.get("apellido","")),
-                _campo("Nombre",     p.get("nombre","")),
-                _campo("DNI",        p.get("dni","")),
-                _campo("Fec. nac.",  _fmt_fecha(p.get("fecha_nac",""))),
+                _campo("Apellido",   p.get("apellido", "")),
+                _campo("Nombre",     p.get("nombre", "")),
+                _campo("DNI",        p.get("dni", "")),
+                _campo("Fec. nac.",  _fmt_fecha(p.get("fecha_nac", ""))),
             ], spacing=16),
             ft.Row(controls=[
-                _campo("Grupo sang.", p.get("grupo_sangre","")),
-                _campo("Teléfono",    p.get("telefono","")),
-                _campo("Email",       p.get("email","")),
-                _campo("Obra social", p.get("obra_social","")),
+                _campo("Grupo sang.", p.get("grupo_sangre", "")),
+                _campo("Teléfono",    p.get("telefono", "")),
+                _campo("Email",       p.get("email", "")),
+                _campo("Obra social", p.get("obra_social", "")),
             ], spacing=16),
             ft.Row(controls=[
-                _campo("Dirección",     p.get("direccion","")),
-                _campo("Alergias",      p.get("alergias","")),
-                _campo("Nro. afiliado", p.get("nro_afiliado","")),
+                _campo("Dirección",     p.get("direccion", "")),
+                _campo("Alergias",      p.get("alergias", "")),
+                _campo("Nro. afiliado", p.get("nro_afiliado", "")),
             ], spacing=16),
         ], spacing=10))
 
-        # Antecedentes positivos
         positivos = [lbl for key, lbl in [
-            ("tratamiento_medico","Trat. médico"),("medicamentos","Medicamentos"),
-            ("alergias_med","Alergias med."),("cardiopatias","Cardiopatías"),
-            ("presion_arterial_alt","Alt. tensión"),("embarazo","Embarazo"),
-            ("diabetes","Diabetes"),("hepatitis","Hepatitis"),
-            ("irradiaciones","Irradiaciones"),("discrasias","Discrasias"),
-            ("fiebre_reumatica","Fiebre reumática"),("enf_renales","Enf. renales"),
-            ("inmunosupresion","Inmunosupresión"),("trastornos_emocionales","Trast. emocional"),
-            ("trastornos_respiratorios","Trast. respiratorio"),
-            ("trastornos_gastricos","Trast. gástrico"),
-            ("epilepsia","Epilepsia"),("cirugias","Cirugías"),
-            ("enf_orales","Enf. orales"),("otras_alteraciones","Otras alt."),
-            ("fuma_licor","Tabaquismo/Alcohol"),
+            ("tratamiento_medico",       "Trat. médico"),
+            ("medicamentos",             "Medicamentos"),
+            ("alergias_med",             "Alergias med."),
+            ("cardiopatias",             "Cardiopatías"),
+            ("presion_arterial_alt",     "Alt. tensión"),
+            ("embarazo",                 "Embarazo"),
+            ("diabetes",                 "Diabetes"),
+            ("hepatitis",                "Hepatitis"),
+            ("irradiaciones",            "Irradiaciones"),
+            ("discrasias",               "Discrasias"),
+            ("fiebre_reumatica",         "Fiebre reumática"),
+            ("enf_renales",              "Enf. renales"),
+            ("inmunosupresion",          "Inmunosupresión"),
+            ("trastornos_emocionales",   "Trast. emocional"),
+            ("trastornos_respiratorios", "Trast. respiratorio"),
+            ("trastornos_gastricos",     "Trast. gástrico"),
+            ("epilepsia",                "Epilepsia"),
+            ("cirugias",                 "Cirugías"),
+            ("enf_orales",               "Enf. orales"),
+            ("otras_alteraciones",       "Otras alt."),
+            ("fuma_licor",               "Tabaquismo/Alcohol"),
         ] if ant_dict.get(key)]
 
         ant_chips = ft.Row(controls=[
@@ -326,22 +417,23 @@ class _HistoriaClinicaTab(ft.Column):
             )
             for lbl in positivos
         ] or [ft.Text("Sin antecedentes positivos registrados",
-                       size=11, color="#9E9E9E")],
+                      size=11, color="#9E9E9E")],
             wrap=True, spacing=6,
         )
 
         anamnesis = _card(ft.Column(controls=[
-            _titulo_sec("Anamnesis — Antecedentes positivos", ft.Icons.WARNING_AMBER),
+            _titulo_sec("Anamnesis — Antecedentes positivos",
+                        ft.Icons.WARNING_AMBER),
             ant_chips,
         ], spacing=8))
 
         sv_cols = [
-            ("Presión",   sv.get("tension_arterial","")),
-            ("Pulso",     sv.get("pulso","")),
-            ("Temp.",     sv.get("temperatura","")),
-            ("F. Resp.",  sv.get("frecuencia_resp","")),
-            ("Peso",      (sv.get("peso","") + " kg") if sv.get("peso") else "—"),
-            ("Talla",     (sv.get("estatura","") + " cm") if sv.get("estatura") else "—"),
+            ("Presión",  sv.get("tension_arterial", "")),
+            ("Pulso",    sv.get("pulso", "")),
+            ("Temp.",    sv.get("temperatura", "")),
+            ("F. Resp.", sv.get("frecuencia_resp", "")),
+            ("Peso",     (sv.get("peso", "") + " kg") if sv.get("peso") else "—"),
+            ("Talla",    (sv.get("estatura", "") + " cm") if sv.get("estatura") else "—"),
         ]
         cv = _card(ft.Column(controls=[
             _titulo_sec("Constantes Vitales", ft.Icons.MONITOR_HEART),
@@ -351,14 +443,13 @@ class _HistoriaClinicaTab(ft.Column):
         consulta = _card(ft.Column(controls=[
             _titulo_sec("Datos de la Consulta", ft.Icons.NOTES),
             ft.Row(controls=[
-                _campo("N° Historia",  h.get("historia_no","")),
-                _campo("Odontólogo",   h.get("odontologo","")),
-                _campo("Fecha",        _fmt_fecha(h.get("fecha_elaboracion",""))),
+                _campo("N° Historia", h.get("historia_no", "")),
+                _campo("Odontólogo",  h.get("odontologo", "")),
+                _campo("Fecha",       _fmt_fecha(h.get("fecha_elaboracion", ""))),
             ], spacing=16),
-            _campo("Motivo de consulta", h.get("motivo_consulta","")),
-            _campo("Hallazgos / Enfermedad actual",
-                   h.get("enfermedad_actual","")),
-            _campo("Observaciones",  h.get("observaciones","")),
+            _campo("Motivo de consulta", h.get("motivo_consulta", "")),
+            _campo("Hallazgos / Enfermedad actual", h.get("enfermedad_actual", "")),
+            _campo("Observaciones", h.get("observaciones", "")),
         ], spacing=10))
 
         nota = ft.Container(
@@ -407,27 +498,28 @@ class _HistoriaClinicaTab(ft.Column):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  TAB 2 — Presupuestos (.xlsx)
+#  TAB 2 — Reporte Financiero Total (.xlsx)
+#  Multi-selección de especialistas + paciente + saldo mínimo
 # ═══════════════════════════════════════════════════════════════════════════
 
-class _PresupuestosTab(ft.Column):
+class _ReporteFinancieroTab(ft.Column):
     def __init__(self):
         super().__init__(spacing=0, expand=True)
-        self._dd_esp = ft.Dropdown(
-            label="Especialista", value="",
-            options=[ft.dropdown.Option("","(Todos)")],
-            expand=True, dense=True,
-        )
-        self._dd_pac = ft.Dropdown(
-            label="Paciente", value="",
-            options=[ft.dropdown.Option("","(Todos)")],
+
+        self._sel_esp = _MultiSelector("Especialistas", alto=140)
+        self._dd_pac  = ft.Dropdown(
+            label="Paciente",
+            hint_text="Todos…",
+            options=[ft.dropdown.Option("", "(Todos)")],
             expand=True, dense=True,
         )
         self._tf_saldo = ft.TextField(
-            label="Saldo mínimo ($)", value="0",
-            hint_text="Ej: 500", dense=True,
-            expand=True,
+            label="Saldo mínimo ($)",
+            value="0",
+            hint_text="Ej: 500",
+            dense=True,
             keyboard_type=ft.KeyboardType.NUMBER,
+            width=140,
         )
         self._area  = ft.Container(expand=True)
         self._datos: list[dict] = []
@@ -437,22 +529,24 @@ class _PresupuestosTab(ft.Column):
         filtros = ft.Container(
             content=ft.Column(controls=[
                 ft.Row(controls=[
-                    ft.Row(controls=[self._dd_esp], expand=3),
-                    ft.Row(controls=[self._dd_pac], expand=3),
-                    ft.Row(controls=[self._tf_saldo], expand=2),
-                ], spacing=10),
+                    ft.Container(content=self._sel_esp, expand=3),
+                    ft.Column(controls=[
+                        ft.Row(controls=[self._dd_pac], expand=True),
+                        ft.Row(controls=[self._tf_saldo]),
+                    ], expand=3, spacing=10),
+                ], spacing=16, vertical_alignment=ft.CrossAxisAlignment.START),
                 ft.Row(controls=[
                     _btn_azul("Aplicar filtros", ft.Icons.FILTER_ALT,
-                               lambda _: self._cargar()),
+                              lambda _: self._cargar()),
                     ft.ElevatedButton(
                         "Exportar Excel (.xlsx)",
-                        icon=ft.Icons.TABLE_CHART,
+                        icon=ft.Icons.FILE_DOWNLOAD,
                         on_click=self._exportar,
                         style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
                                               color=ft.Colors.WHITE),
                     ),
                 ], spacing=10),
-            ], spacing=8),
+            ], spacing=10),
             padding=ft.padding.symmetric(horizontal=14, vertical=12),
             bgcolor=_GRIS_BG,
             border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
@@ -462,22 +556,23 @@ class _PresupuestosTab(ft.Column):
     def did_mount(self):
         try:
             esps = listar_especialistas()
-            self._dd_esp.options = [ft.dropdown.Option("","(Todos)")] + [
-                ft.dropdown.Option(e["id"],
-                    f"{e.get('apellido','')} {e.get('nombre','')}".strip())
+            self._sel_esp.set_items([
+                (e["id"],
+                 f"{e.get('apellido', '')} {e.get('nombre', '')}".strip())
                 for e in esps
-            ]
+            ])
             pacs = listar_pacientes()
-            self._dd_pac.options = [ft.dropdown.Option("","(Todos)")] + [
-                ft.dropdown.Option(p["id"],
-                    f"{p.get('apellido','')} {p.get('nombre','')}".strip())
-                for p in sorted(pacs, key=lambda x: x.get("apellido",""))
+            self._dd_pac.options = [ft.dropdown.Option("", "(Todos)")] + [
+                ft.dropdown.Option(
+                    p["id"],
+                    f"{p.get('apellido', '')} {p.get('nombre', '')}".strip()
+                )
+                for p in sorted(pacs, key=lambda x: x.get("apellido", ""))
             ]
             if self.page:
-                self._dd_esp.update()
                 self._dd_pac.update()
         except Exception as ex:
-            print(f"[Presupuestos] error cargando opciones: {ex}", flush=True)
+            print(f"[FinancieroTab] error cargando: {ex}", flush=True)
         self._cargar()
 
     def _cargar(self):
@@ -488,27 +583,46 @@ class _PresupuestosTab(ft.Column):
         if self._area.page:
             self._area.update()
 
+        esp_ids = self._sel_esp.get_selected_ids()   # None = todos
+        pac_id  = self._dd_pac.value or None
         try:
-            saldo_min = float((self._tf_saldo.value or "0").replace(",","."))
+            saldo_min = float((self._tf_saldo.value or "0").replace(",", "."))
         except Exception:
             saldo_min = 0.0
 
-        filtros = {
-            "especialista_id": self._dd_esp.value or None,
-            "paciente_id":     self._dd_pac.value or None,
-            "saldo_minimo":    saldo_min,
-        }
+        # Si ningún especialista seleccionado → mostrar aviso
+        if esp_ids is not None and len(esp_ids) == 0:
+            self._area.content = ft.Container(
+                content=ft.Column(controls=[
+                    ft.Icon(ft.Icons.WARNING_AMBER, size=36,
+                            color=ft.Colors.ORANGE_700),
+                    ft.Text("Seleccioná al menos un especialista.",
+                            size=13, color=ft.Colors.ORANGE_700),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                   alignment=ft.MainAxisAlignment.CENTER),
+                expand=True, alignment=ft.Alignment(0, 0),
+            )
+            if self._area.page:
+                self._area.update()
+            return
+
+        pac_ids = [pac_id] if pac_id else None
         try:
-            self._datos = obtener_datos_reporte_presupuestos(filtros)
+            todos = obtener_reporte_financiero_total(
+                especialista_ids=esp_ids,
+                paciente_ids=pac_ids,
+            )
+            self._datos = [d for d in todos
+                           if float(d.get("saldo", 0)) >= saldo_min]
         except Exception as ex:
             self._area.content = ft.Text(f"Error: {ex}",
                                           color=ft.Colors.RED_700)
             if self._area.page:
                 self._area.update()
             return
-        self._refrescar_tabla()
+        self._refrescar_tabla(saldo_min)
 
-    def _refrescar_tabla(self):
+    def _refrescar_tabla(self, saldo_min: float = 0.0):
         datos = self._datos
         if not datos:
             self._area.content = _sin_datos()
@@ -517,57 +631,54 @@ class _PresupuestosTab(ft.Column):
             return
 
         columnas = [
-            ("Paciente", 4), ("Descripción", 5), ("Diente", 1),
-            ("Especialista", 3), ("Estado", 2),
-            ("Costo", 2), ("Pagado", 2), ("Saldo", 2),
+            ("Paciente", 4), ("DNI", 2), ("Obra Social", 2),
+            ("Especialista", 3), ("Tratamientos", 1),
+            ("Total Costo", 2), ("Pagado", 2), ("Saldo", 2),
         ]
         filas = [_encabezado_tabla(columnas)]
 
-        total_c = total_p = total_s = 0.0
-        for i, t in enumerate(datos):
-            pac = (t.get("pacientes") or {})
-            esp = (t.get("especialistas") or {})
+        gran_c = gran_p = gran_s = 0.0
+        for i, d in enumerate(datos):
+            pac = d.get("paciente") or {}
+            esp = d.get("especialista") or {}
             nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
             nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
-            estado  = t.get("estado","")
-            bg, fg  = _COL_ESTADO_TRAT.get(estado, ("#EEE","#333"))
-            costo   = float(t.get("costo", 0))
-            pagado  = float(t.get("pagado", 0))
-            saldo   = float(t.get("saldo", 0))
-            total_c += costo; total_p += pagado; total_s += saldo
+            costo   = float(d.get("total_costo", 0))
+            pagado  = float(d.get("total_pagado", 0))
+            saldo   = float(d.get("saldo", 0))
+            gran_c += costo; gran_p += pagado; gran_s += saldo
 
-            saldo_txt = ft.Text(
-                _fmt_monto(saldo), size=10,
-                weight=ft.FontWeight.BOLD,
+            saldo_ctrl = ft.Text(
+                _fmt_monto(saldo), size=10, weight=ft.FontWeight.BOLD,
                 color=ft.Colors.RED_700 if saldo > 0 else ft.Colors.GREEN_700,
             )
             filas.append(_fila_tabla([
-                (nom_pac or "—", 4),
-                (t.get("descripcion","") or "—", 5),
-                (str(t.get("diente","")) if t.get("diente") else "—", 1),
-                (nom_esp or "—", 3),
-                (_badge(estado, bg, fg), 2),
-                (_fmt_monto(costo), 2),
-                (_fmt_monto(pagado), 2),
-                (saldo_txt, 2),
+                (nom_pac or "—",                     4),
+                (pac.get("dni") or "—",              2),
+                (pac.get("obra_social") or "—",      2),
+                (nom_esp or "—",                     3),
+                (str(d.get("n_tratamientos", 0)),    1),
+                (_fmt_monto(costo),                  2),
+                (_fmt_monto(pagado),                 2),
+                (saldo_ctrl,                         2),
             ], alt=i % 2 == 1))
 
         total_bar = ft.Container(
             content=ft.Row(controls=[
-                ft.Text(f"{len(datos)} tratamientos",
+                ft.Text(f"{len(datos)} registros",
                         size=11, weight=ft.FontWeight.BOLD),
                 ft.Container(expand=True),
-                ft.Text("Costo:", size=11),
-                ft.Text(_fmt_monto(total_c), size=12,
+                ft.Text("Costo total:", size=11),
+                ft.Text(_fmt_monto(gran_c), size=12,
                         weight=ft.FontWeight.BOLD, color=_AZUL),
                 ft.Text("  Pagado:", size=11),
-                ft.Text(_fmt_monto(total_p), size=12,
+                ft.Text(_fmt_monto(gran_p), size=12,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.GREEN_700),
-                ft.Text("  Saldo:", size=11),
-                ft.Text(_fmt_monto(total_s), size=12,
+                ft.Text("  Saldo pendiente:", size=11),
+                ft.Text(_fmt_monto(gran_s), size=12,
                         weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.RED_700 if total_s > 0
+                        color=ft.Colors.RED_700 if gran_s > 0
                               else ft.Colors.GREEN_700),
             ], spacing=8, wrap=False),
             padding=ft.padding.symmetric(horizontal=12, vertical=8),
@@ -576,16 +687,13 @@ class _PresupuestosTab(ft.Column):
         )
 
         self._area.content = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Container(
-                        content=ft.Column(controls=filas, spacing=0),
-                        expand=True,
-                    ),
-                    total_bar,
-                ],
-                spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
-            ),
+            content=ft.Column(controls=[
+                ft.Container(
+                    content=ft.Column(controls=filas, spacing=0),
+                    expand=True,
+                ),
+                total_bar,
+            ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO),
             expand=True,
         )
         if self._area.page:
@@ -594,30 +702,37 @@ class _PresupuestosTab(ft.Column):
     def _exportar(self, e=None):
         if not self._datos:
             if self.page:
-                _snack(self.page, "Aplicá los filtros primero.", error=True)
+                _snack(self.page, "Cargá los datos con 'Aplicar filtros' primero.",
+                       error=True)
             return
         try:
-            from generar_archivos import generar_excel_presupuestos
-            esp_val = self._dd_esp.value
+            from generar_archivos import generar_excel_financiero_total
+            esp_labels = self._sel_esp.get_selected_labels()
+            desc = "Especialistas: " + (
+                ", ".join(esp_labels) if esp_labels else "Todos"
+            )
             pac_val = self._dd_pac.value
-            desc    = []
-            if esp_val:
-                desc.append(f"Especialista: {esp_val[:8]}")
             if pac_val:
-                desc.append(f"Paciente: {pac_val[:8]}")
-            sal = self._tf_saldo.value or "0"
-            if sal != "0":
-                desc.append(f"Saldo mín: ${sal}")
+                for opt in self._dd_pac.options:
+                    if opt.key == pac_val:
+                        desc += f"  |  Paciente: {opt.text or ''}"
+                        break
+            try:
+                saldo_min = float(
+                    (self._tf_saldo.value or "0").replace(",", "."))
+            except Exception:
+                saldo_min = 0.0
 
-            ruta   = generar_excel_presupuestos(
+            ruta   = generar_excel_financiero_total(
                 self._datos,
-                filtros_desc="  |  ".join(desc),
+                filtros_desc=desc,
+                saldo_minimo=saldo_min,
                 output_dir=_OUT_DIR,
             )
             nombre = os.path.basename(ruta)
-            print(f"[XLSX-Presup] {ruta}", flush=True)
+            print(f"[XLSX-Financiero] {ruta}", flush=True)
             if self.page:
-                _dlg_ok(self.page, "Excel de Presupuestos generado",
+                _dlg_ok(self.page, "Reporte Financiero generado",
                         f"Archivo: {nombre}")
         except Exception as ex:
             import traceback; traceback.print_exc()
@@ -626,47 +741,72 @@ class _PresupuestosTab(ft.Column):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  TAB 3 — Agenda / Cronograma (.xlsx)
+#  TAB 3 — Reporte de Agenda Consolidada (.xlsx)
+#  Multi-selección de especialistas + rango libre de fechas
 # ═══════════════════════════════════════════════════════════════════════════
 
-class _AgendaTab(ft.Column):
+class _ReporteAgendaTab(ft.Column):
     def __init__(self):
         super().__init__(spacing=0, expand=True)
-        self._dd_esp = ft.Dropdown(
-            label="Especialista", value="",
-            options=[ft.dropdown.Option("","(Todos)")],
-            expand=True, dense=True,
+
+        today     = datetime.date.today()
+        semana    = (today + datetime.timedelta(days=7)).isoformat()
+        self._sel_esp = _MultiSelector("Especialistas", alto=140)
+        self._tf_desde = ft.TextField(
+            label="Desde (AAAA-MM-DD)",
+            value=today.isoformat(),
+            dense=True, width=155,
+            hint_text="2025-01-01",
         )
-        self._dd_per = ft.Dropdown(
-            label="Período", value="semana",
+        self._tf_hasta = ft.TextField(
+            label="Hasta (AAAA-MM-DD)",
+            value=semana,
+            dense=True, width=155,
+            hint_text="2025-12-31",
+        )
+        self._dd_estado = ft.Dropdown(
+            label="Estado de cita",
+            value="",
             options=[
-                ft.dropdown.Option("semana",    "Próxima semana (7 días)"),
-                ft.dropdown.Option("quincena",  "Próxima quincena (15 días)"),
-                ft.dropdown.Option("mes",       "Próximo mes (30 días)"),
+                ft.dropdown.Option("",          "(Todos)"),
+                ft.dropdown.Option("pendiente",  "Pendiente"),
+                ft.dropdown.Option("confirmada", "Confirmada"),
+                ft.dropdown.Option("realizada",  "Realizada"),
+                ft.dropdown.Option("cancelada",  "Cancelada"),
             ],
-            expand=True, dense=True,
+            dense=True, width=160,
         )
         self._area  = ft.Container(expand=True)
         self._datos: list[dict] = []
-        self._esp_nombre: str   = ""
         self._construir_shell()
 
     def _construir_shell(self):
         filtros = ft.Container(
-            content=ft.Row(controls=[
-                ft.Row(controls=[self._dd_esp], expand=4),
-                ft.Row(controls=[self._dd_per], expand=3),
-                _btn_azul("Ver cronograma", ft.Icons.CALENDAR_VIEW_WEEK,
-                           lambda _: self._cargar()),
-                ft.ElevatedButton(
-                    "Exportar Excel (.xlsx)",
-                    icon=ft.Icons.TABLE_CHART,
-                    on_click=self._exportar,
-                    style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
-                                          color=ft.Colors.WHITE),
-                ),
-            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.END),
-            padding=ft.padding.symmetric(horizontal=14, vertical=10),
+            content=ft.Column(controls=[
+                ft.Row(controls=[
+                    ft.Container(content=self._sel_esp, expand=3),
+                    ft.Column(controls=[
+                        ft.Row(controls=[
+                            self._tf_desde,
+                            ft.Text("→", size=14, color=_AZUL),
+                            self._tf_hasta,
+                        ], spacing=8),
+                        ft.Row(controls=[self._dd_estado]),
+                    ], expand=3, spacing=10),
+                ], spacing=16, vertical_alignment=ft.CrossAxisAlignment.START),
+                ft.Row(controls=[
+                    _btn_azul("Ver agenda", ft.Icons.CALENDAR_VIEW_MONTH,
+                              lambda _: self._cargar()),
+                    ft.ElevatedButton(
+                        "Exportar Excel (.xlsx)",
+                        icon=ft.Icons.FILE_DOWNLOAD,
+                        on_click=self._exportar,
+                        style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_800,
+                                              color=ft.Colors.WHITE),
+                    ),
+                ], spacing=10),
+            ], spacing=10),
+            padding=ft.padding.symmetric(horizontal=14, vertical=12),
             bgcolor=_GRIS_BG,
             border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
         )
@@ -675,15 +815,13 @@ class _AgendaTab(ft.Column):
     def did_mount(self):
         try:
             esps = listar_especialistas()
-            self._dd_esp.options = [ft.dropdown.Option("","(Todos)")] + [
-                ft.dropdown.Option(e["id"],
-                    f"{e.get('apellido','')} {e.get('nombre','')}".strip())
+            self._sel_esp.set_items([
+                (e["id"],
+                 f"{e.get('apellido', '')} {e.get('nombre', '')}".strip())
                 for e in esps
-            ]
-            if self._dd_esp.page:
-                self._dd_esp.update()
+            ])
         except Exception as ex:
-            print(f"[Agenda-Tab] error: {ex}", flush=True)
+            print(f"[AgendaTab] error cargando especialistas: {ex}", flush=True)
         self._cargar()
 
     def _cargar(self):
@@ -694,44 +832,56 @@ class _AgendaTab(ft.Column):
         if self._area.page:
             self._area.update()
 
-        esp_id  = self._dd_esp.value or None
-        periodo = self._dd_per.value or "semana"
+        esp_ids = self._sel_esp.get_selected_ids()
 
-        # Guardar nombre del especialista para el Excel
-        if esp_id:
-            for opt in self._dd_esp.options:
-                if opt.key == esp_id:
-                    self._esp_nombre = opt.text or ""
-                    break
-        else:
-            self._esp_nombre = ""
+        if esp_ids is not None and len(esp_ids) == 0:
+            self._area.content = ft.Container(
+                content=ft.Column(controls=[
+                    ft.Icon(ft.Icons.WARNING_AMBER, size=36,
+                            color=ft.Colors.ORANGE_700),
+                    ft.Text("Seleccioná al menos un especialista.",
+                            size=13, color=ft.Colors.ORANGE_700),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                   alignment=ft.MainAxisAlignment.CENTER),
+                expand=True, alignment=ft.Alignment(0, 0),
+            )
+            if self._area.page:
+                self._area.update()
+            return
+
+        desde  = (self._tf_desde.value or "").strip()
+        hasta  = (self._tf_hasta.value or "").strip()
+        estado = self._dd_estado.value or None
 
         try:
-            self._datos = obtener_datos_citas(
-                especialista_id=esp_id,
-                periodo=periodo,
+            citas = obtener_agenda_consolidada(
+                especialista_ids=esp_ids,
+                fecha_inicio=desde or None,
+                fecha_fin=hasta or None,
             )
+            if estado:
+                citas = [c for c in citas if c.get("estado") == estado]
+            self._datos = citas
         except Exception as ex:
             self._area.content = ft.Text(f"Error: {ex}",
                                           color=ft.Colors.RED_700)
             if self._area.page:
                 self._area.update()
             return
-        self._refrescar_tabla()
+        self._refrescar_tabla(desde, hasta)
 
-    def _refrescar_tabla(self):
-        datos   = self._datos
-        periodo = self._dd_per.value or "semana"
-        PERIODOS = {"semana":"7 días","quincena":"15 días","mes":"30 días"}
-        periodo_txt = PERIODOS.get(periodo, periodo)
+    def _refrescar_tabla(self, desde: str, hasta: str):
+        datos = self._datos
+        DIAS_ES = {0: "Lun", 1: "Mar", 2: "Mié", 3: "Jue",
+                   4: "Vie", 5: "Sáb", 6: "Dom"}
 
-        # Barra de info
         info_bar = ft.Container(
             content=ft.Row(controls=[
                 ft.Icon(ft.Icons.INFO_OUTLINE, size=14, color=_AZUL),
                 ft.Text(
-                    f"{len(datos)} cita(s) para los próximos {periodo_txt}"
-                    + (f" — {self._esp_nombre}" if self._esp_nombre else ""),
+                    f"{len(datos)} cita(s) — "
+                    f"{_fmt_fecha(desde) if desde else '?'} "
+                    f"→ {_fmt_fecha(hasta) if hasta else '?'}",
                     size=11, color=_AZUL,
                 ),
             ], spacing=8),
@@ -747,25 +897,44 @@ class _AgendaTab(ft.Column):
                 self._area.update()
             return
 
-        DIAS_ES = {0:"Lun",1:"Mar",2:"Mié",3:"Jue",4:"Vie",5:"Sáb",6:"Dom"}
+        # Contadores por estado
+        est_count: dict[str, int] = {}
+        for c in datos:
+            est = c.get("estado", "")
+            est_count[est] = est_count.get(est, 0) + 1
+
+        contador_chips = ft.Row(controls=[
+            ft.Container(
+                content=ft.Text(
+                    f"{est.capitalize()}: {cnt}",
+                    size=10, weight=ft.FontWeight.W_600,
+                    color=_COL_ESTADO_CITA.get(est, ("#EEE", "#333"))[1],
+                ),
+                bgcolor=_COL_ESTADO_CITA.get(est, ("#EEE", "#333"))[0],
+                border_radius=12,
+                padding=ft.padding.symmetric(horizontal=10, vertical=3),
+            )
+            for est, cnt in sorted(est_count.items())
+        ], spacing=6, wrap=True)
+
         columnas = [
             ("Fecha", 2), ("Día", 1), ("Hora", 1), ("Paciente", 4),
-            ("Teléfono", 2), ("Especialista", 3), ("Motivo", 4), ("Estado", 2),
+            ("Teléfono", 2), ("Especialista", 3), ("Motivo", 4),
+            ("Estado", 2),
         ]
         filas = [_encabezado_tabla(columnas)]
 
-        est_count: dict[str, int] = {}
         for i, c in enumerate(datos):
-            pac    = (c.get("pacientes") or {})
-            esp    = (c.get("especialistas") or {})
+            pac = c.get("pacientes") or {}
+            esp = c.get("especialistas") or {}
             nom_pac = f"{pac.get('apellido','')} {pac.get('nombre','')}".strip()
             nom_esp = f"{esp.get('apellido','')} {esp.get('nombre','')}".strip()
-            estado  = c.get("estado","")
-            bg, fg  = _COL_ESTADO_CITA.get(estado, ("#EEE","#333"))
-            est_count[estado] = est_count.get(estado, 0) + 1
-            iso = c.get("fecha_hora","")
+            estado  = c.get("estado", "")
+            bg, fg  = _COL_ESTADO_CITA.get(estado, ("#EEE", "#333"))
+            iso = c.get("fecha_hora", "")
             try:
-                dt  = datetime.datetime.fromisoformat(iso.replace("Z","+00:00"))
+                dt    = datetime.datetime.fromisoformat(
+                    iso.replace("Z", "+00:00"))
                 fecha = dt.strftime("%d/%m/%Y")
                 dia   = DIAS_ES.get(dt.weekday(), "")
                 hora  = dt.strftime("%H:%M")
@@ -775,43 +944,25 @@ class _AgendaTab(ft.Column):
             filas.append(_fila_tabla([
                 (fecha, 2), (dia, 1), (hora, 1),
                 (nom_pac or "—", 4),
-                (pac.get("telefono","") or "—", 2),
+                (pac.get("telefono") or "—", 2),
                 (nom_esp or "—", 3),
-                (c.get("motivo","") or "—", 4),
+                (c.get("motivo") or "—", 4),
                 (_badge(estado, bg, fg), 2),
             ], alt=i % 2 == 1))
 
-        total_bar = ft.Container(
-            content=ft.Row(controls=[
-                ft.Text(f"Total: {len(datos)} citas", size=11,
-                        weight=ft.FontWeight.BOLD),
-                *[_badge(f"{n} {est}",
-                         *_COL_ESTADO_CITA.get(est, ("#EEE","#333")))
-                  for est, n in sorted(est_count.items())],
-            ], spacing=10, wrap=True),
-            padding=ft.padding.symmetric(horizontal=12, vertical=8),
-            bgcolor=_AZUL_BG,
-            border=ft.border.only(top=ft.BorderSide(1, "#BBDEFB")),
-        )
-
-        self._area.content = ft.Column(
-            controls=[
+        self._area.content = ft.Container(
+            content=ft.Column(controls=[
                 info_bar,
                 ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Container(
-                                content=ft.Column(controls=filas, spacing=0),
-                                expand=True,
-                            ),
-                            total_bar,
-                        ],
-                        spacing=0, expand=True, scroll=ft.ScrollMode.AUTO,
-                    ),
+                    content=contador_chips,
+                    padding=ft.padding.symmetric(horizontal=14, vertical=4),
+                ),
+                ft.Container(
+                    content=ft.Column(controls=filas, spacing=0),
                     expand=True,
                 ),
-            ],
-            spacing=0, expand=True,
+            ], spacing=0, expand=True, scroll=ft.ScrollMode.AUTO),
+            expand=True,
         )
         if self._area.page:
             self._area.update()
@@ -819,20 +970,25 @@ class _AgendaTab(ft.Column):
     def _exportar(self, e=None):
         if not self._datos:
             if self.page:
-                _snack(self.page, "Cargá el cronograma primero.", error=True)
+                _snack(self.page, "Cargá los datos con 'Ver agenda' primero.",
+                       error=True)
             return
         try:
-            from generar_archivos import generar_excel_agenda
-            ruta   = generar_excel_agenda(
+            from generar_archivos import generar_excel_agenda_consolidada
+            esp_labels = self._sel_esp.get_selected_labels()
+            desde = (self._tf_desde.value or "").strip()
+            hasta = (self._tf_hasta.value or "").strip()
+            ruta   = generar_excel_agenda_consolidada(
                 self._datos,
-                especialista_nombre=self._esp_nombre,
-                periodo=self._dd_per.value or "semana",
+                especialistas_nombres=esp_labels or None,
+                fecha_inicio=desde,
+                fecha_fin=hasta,
                 output_dir=_OUT_DIR,
             )
             nombre = os.path.basename(ruta)
             print(f"[XLSX-Agenda] {ruta}", flush=True)
             if self.page:
-                _dlg_ok(self.page, "Excel de Agenda generado",
+                _dlg_ok(self.page, "Agenda Consolidada generada",
                         f"Archivo: {nombre}")
         except Exception as ex:
             import traceback; traceback.print_exc()
@@ -841,67 +997,47 @@ class _AgendaTab(ft.Column):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  Vista principal: ReportesView
+#  ReportesView — vista principal con 3 pestañas
 # ═══════════════════════════════════════════════════════════════════════════
-
-_TABS = [
-    ("Historia Clínica", ft.Icons.ARTICLE,         _HistoriaClinicaTab),
-    ("Presupuestos",     ft.Icons.REQUEST_QUOTE,    _PresupuestosTab),
-    ("Agenda",           ft.Icons.CALENDAR_VIEW_WEEK, _AgendaTab),
-]
-
 
 class ReportesView(ft.Column):
     def __init__(self):
         super().__init__(spacing=0, expand=True)
-        self._tab      = 0
-        self._area     = ft.Container(expand=True)
-        self._tab_btns: list[ft.ElevatedButton] = []
-        self._construir()
 
-    def _construir(self):
-        for i, (lbl, icn, _cls) in enumerate(_TABS):
-            idx = i
-            btn = ft.ElevatedButton(
-                lbl, icon=icn,
-                on_click=lambda _, x=idx: self._sel(x),
-                style=ft.ButtonStyle(
-                    bgcolor=_AZUL if i == 0 else ft.Colors.WHITE,
-                    color=ft.Colors.WHITE if i == 0 else "#212121",
+        self._tab_hc  = _HistoriaClinicaTab()
+        self._tab_fin = _ReporteFinancieroTab()
+        self._tab_age = _ReporteAgendaTab()
+
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            expand=True,
+            tabs=[
+                ft.Tab(
+                    text="Historia Clínica",
+                    icon=ft.Icons.ARTICLE,
+                    content=ft.Container(
+                        content=self._tab_hc, expand=True, padding=0,
+                    ),
                 ),
-            )
-            self._tab_btns.append(btn)
-
-        barra_tabs = ft.Container(
-            content=ft.Row(controls=self._tab_btns, spacing=6),
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
-            bgcolor="#FAFAFA",
-            border=ft.border.only(bottom=ft.BorderSide(1, _BORDE)),
+                ft.Tab(
+                    text="Reporte Financiero",
+                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                    content=ft.Container(
+                        content=self._tab_fin, expand=True, padding=0,
+                    ),
+                ),
+                ft.Tab(
+                    text="Reporte de Agenda",
+                    icon=ft.Icons.CALENDAR_MONTH,
+                    content=ft.Container(
+                        content=self._tab_age, expand=True, padding=0,
+                    ),
+                ),
+            ],
         )
 
         self.controls = [
-            _titulo_mod("Reportes ORTHOCLINIC — Documentos y Exportaciones"),
-            barra_tabs,
-            self._area,
+            _titulo_mod("Reportes Colectivos — ORTHOCLINIC"),
+            tabs,
         ]
-
-    def did_mount(self):
-        self._cargar_vista()
-
-    def _sel(self, idx: int):
-        self._tab = idx
-        for i, btn in enumerate(self._tab_btns):
-            btn.style = ft.ButtonStyle(
-                bgcolor=_AZUL if i == idx else ft.Colors.WHITE,
-                color=ft.Colors.WHITE if i == idx else "#212121",
-            )
-            if btn.page:
-                btn.update()
-        self._cargar_vista()
-
-    def _cargar_vista(self):
-        _cls  = _TABS[self._tab][2]
-        vista = _cls()
-        self._area.content = vista
-        if self._area.page:
-            self._area.update()

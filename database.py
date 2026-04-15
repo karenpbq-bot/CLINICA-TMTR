@@ -545,6 +545,108 @@ def cambiar_password_usuario(usuario_id: str, nueva_password: str):
     ).eq("id", usuario_id).execute()
 
 
+# ── REPORTES COLECTIVOS ───────────────────────────────────────────────────
+
+def obtener_reporte_financiero_total(
+    especialista_ids: list | None = None,
+    paciente_ids: list | None = None,
+) -> list[dict]:
+    """
+    Resumen financiero agrupado por (paciente, especialista).
+    Suma costo de todos los tratamientos y resta todos los pagos.
+    especialista_ids / paciente_ids: lista de UUIDs o None (= todos).
+    Cada registro devuelto contiene:
+      paciente, especialista, total_costo, total_pagado, saldo, n_tratamientos.
+    """
+    q = get_client().table("tratamientos").select(
+        "id, paciente_id, especialista_id, costo, estado, descripcion,"
+        " pacientes(id, nombre, apellido, dni, obra_social, telefono),"
+        " especialistas(nombre, apellido)"
+    )
+    if especialista_ids:
+        q = q.in_("especialista_id", especialista_ids)
+    if paciente_ids:
+        q = q.in_("paciente_id", paciente_ids)
+    tratamientos = q.order("paciente_id").execute().data or []
+
+    if not tratamientos:
+        return []
+
+    # Batch-fetch pagos (evita N+1 queries)
+    trat_ids = [t["id"] for t in tratamientos]
+    pagos_map: dict[str, float] = {}
+    BATCH = 100
+    for i in range(0, len(trat_ids), BATCH):
+        pagos = (
+            get_client().table("pagos")
+            .select("tratamiento_id, monto")
+            .in_("tratamiento_id", trat_ids[i : i + BATCH])
+            .execute()
+            .data or []
+        )
+        for p in pagos:
+            tid = p.get("tratamiento_id")
+            if tid:
+                pagos_map[tid] = pagos_map.get(tid, 0.0) + float(p.get("monto", 0))
+
+    # Agrupar por (paciente_id, especialista_id)
+    grupos: dict[tuple, dict] = {}
+    for t in tratamientos:
+        key = (t.get("paciente_id"), t.get("especialista_id"))
+        if key not in grupos:
+            grupos[key] = {
+                "paciente_id":    t.get("paciente_id"),
+                "especialista_id": t.get("especialista_id"),
+                "paciente":       t.get("pacientes"),
+                "especialista":   t.get("especialistas"),
+                "total_costo":    0.0,
+                "total_pagado":   0.0,
+                "n_tratamientos": 0,
+            }
+        g = grupos[key]
+        g["total_costo"]    += float(t.get("costo", 0))
+        g["total_pagado"]   += pagos_map.get(t["id"], 0.0)
+        g["n_tratamientos"] += 1
+
+    result = []
+    for g in grupos.values():
+        g["saldo"] = g["total_costo"] - g["total_pagado"]
+        result.append(g)
+
+    result.sort(key=lambda x: (
+        (x.get("paciente") or {}).get("apellido", ""),
+        (x.get("paciente") or {}).get("nombre", ""),
+    ))
+    return result
+
+
+def obtener_agenda_consolidada(
+    especialista_ids: list | None = None,
+    fecha_inicio: str | None = None,
+    fecha_fin: str | None = None,
+) -> list[dict]:
+    """
+    Citas de múltiples especialistas en un rango de fechas.
+    especialista_ids: lista de UUIDs o None (todos).
+    fecha_inicio / fecha_fin: 'YYYY-MM-DD' o None.
+    """
+    from datetime import date, timedelta
+
+    hoy = date.today()
+    fi  = fecha_inicio or hoy.isoformat()
+    ff  = fecha_fin    or (hoy + timedelta(days=30)).isoformat()
+
+    q = get_client().table("citas").select(
+        "*, pacientes(nombre, apellido, telefono, email),"
+        " especialistas(nombre, apellido)"
+    )
+    q = q.gte("fecha_hora", f"{fi}T00:00:00")
+    q = q.lte("fecha_hora", f"{ff}T23:59:59")
+    if especialista_ids:
+        q = q.in_("especialista_id", especialista_ids)
+    return q.order("fecha_hora").execute().data or []
+
+
 # ── REPORTES ESPECÍFICOS ──────────────────────────────────────────────────
 
 def obtener_datos_reporte_presupuestos(filtros: dict | None = None) -> list[dict]:
