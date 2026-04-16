@@ -44,7 +44,7 @@ def _verificar_credenciales(usuario: str, password: str) -> dict | None:
 
     return None
 
-INACTIVIDAD_SEGUNDOS = 300
+INACTIVIDAD_SEGUNDOS = 180
 PORT = int(os.environ.get("PORT", 8000))
 
 RUTAS_BASE = [
